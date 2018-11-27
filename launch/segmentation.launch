@@ -1,0 +1,13 @@
+<!-- point cloud segmentor -->
+<launch>
+
+  <!-- Launch openni -->
+  <include file="$(find openni_launch)/launch/openni.launch">
+    <arg name="depth_frame_id" value="base_link" />
+  </include>
+
+     <!-- <node name="rviz" pkg="rviz" type="rviz" output="screen"/>-->
+
+ <node name="segmentation_node" pkg="kinect_segmentation" type="segmentation" args="/camera/depth/points" output="screen"/> 
+
+</launch>

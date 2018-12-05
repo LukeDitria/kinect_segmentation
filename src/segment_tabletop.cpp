@@ -1,0 +1,210 @@
+//System
+#include <iostream>
+#include <math.h>
+
+//ROS
+#include <ros/ros.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <geometry_msgs/Point.h>
+#include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
+
+//PCL
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/conversions.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/segmentation/extract_clusters.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/surface/convex_hull.h>
+#include <pcl/segmentation/extract_polygonal_prism_data.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/common/centroid.h>
+#include <pcl/features/crh.h>
+#include <pcl/common/transforms.h>
+
+typedef pcl::Histogram<90> CRH90;
+
+class SegmentTabletop {
+private:
+
+  ros::NodeHandle nh_;
+  ros::Subscriber point_cloud_sub_;
+  ros::Publisher object_markers_pub_;
+  std::string point_cloud_topic;
+  std::string out_object_markers_topic;
+  visualization_msgs::MarkerArray marker_array;
+
+  
+  void init_params(){    
+    nh_.getParam("point_cloud_topic", point_cloud_topic);
+    nh_.getParam("out_object_markers_topic", out_object_markers_topic);
+  }  
+  void init_subs(){
+    point_cloud_sub_ = nh_.subscribe(point_cloud_topic, 1, &SegmentTabletop::cloud_cb, this); 
+  }
+  void init_pubs(){
+    object_markers_pub_ = nh_.advertise<visualization_msgs::MarkerArray> (out_object_markers_topic, 1);
+  }
+  void cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input){
+    ROS_INFO("cloud_cb");
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients ());
+    pcl::PointIndices::Ptr inliers (new pcl::PointIndices ());
+
+    // Create the segmentation object
+    pcl::SACSegmentation<pcl::PointXYZ> seg;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr convexHull(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr objects(new pcl::PointCloud<pcl::PointXYZ>);
+
+    pcl::fromROSMsg (*input, *cloud);
+
+    //fit a plane to the point cloud
+    seg.setOptimizeCoefficients (true); // Optional
+    seg.setModelType (pcl::SACMODEL_PLANE);
+    seg.setMethodType (pcl::SAC_RANSAC);
+    seg.setDistanceThreshold (0.01);
+  
+    seg.setInputCloud (cloud);
+    seg.segment (*inliers, *coefficients); 
+
+    if (inliers->indices.size() == 0) {      
+      std::cout << "Could not find a plane in the scene." << std::endl;
+      return;
+    }
+
+    std::cout << "Plane Found" << std::endl;
+
+    // Create the filtering object
+    pcl::ExtractIndices<pcl::PointXYZ> extract;
+    //filtered point cloud
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_inliers (new pcl::PointCloud<pcl::PointXYZ>);
+    
+    extract.setInputCloud (cloud);
+    extract.setIndices (inliers);
+    extract.setNegative (false);
+    extract.filter (*cloud_inliers);
+
+    // Retrieve the convex hull.
+    pcl::ConvexHull<pcl::PointXYZ> hull;
+    hull.setInputCloud(cloud_inliers);
+
+    // Make sure that the resulting hull is bidimensional.
+    hull.setDimension(2);
+    hull.reconstruct(*convexHull);
+
+    // Prism object from convex hull
+    pcl::ExtractPolygonalPrismData<pcl::PointXYZ> prism;
+    prism.setInputCloud(cloud);
+    prism.setInputPlanarHull(convexHull);
+    
+    // First parameter: minimum Z value. Set to 0, segments objects lying on the plane (can be negative).
+    // Second parameter: maximum Z value, set to 10cm. Tune it according to the height of the objects you expect.
+    prism.setHeightLimits(0.02f, 0.5f); // Min then Max
+    //prism.setHeightLimits(-0.5f,-0.02f); // Min then Max
+    pcl::PointIndices::Ptr objectIndices(new pcl::PointIndices);
+
+    prism.segment(*objectIndices);
+
+    // Get and show all points retrieved by the hull.
+    extract.setIndices(objectIndices);
+    extract.filter(*objects);
+
+    if (objectIndices->indices.size() == 0) {
+	std::cout << "No Objects in the scene." << std::endl;
+	return;
+    }
+    
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+    tree->setInputCloud (objects);
+    std::vector<pcl::PointIndices> cluster_indices;
+    pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+    ec.setClusterTolerance (0.02); // 2cm
+    ec.setMinClusterSize (100);
+    ec.setMaxClusterSize (25000);
+    ec.setSearchMethod (tree);
+    ec.setInputCloud (objects);
+    ec.extract (cluster_indices);
+
+    marker_array.markers.resize(cluster_indices.size());
+    std::cout<<cluster_indices.size() << " Objects Found.."<<std::endl;
+
+
+    int i = 0;
+    for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it) {
+      pcl::PointCloud<pcl::PointXYZ>::Ptr object_cluster (new pcl::PointCloud<pcl::PointXYZ>);
+      for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit){
+	object_cluster->points.push_back (objects->points[*pit]); //*
+      }
+      object_cluster->width = object_cluster->points.size ();
+      object_cluster->height = 1;
+      object_cluster->is_dense = true;
+
+      pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normalEstimation;
+      pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+      normalEstimation.setInputCloud(object_cluster);
+      normalEstimation.setRadiusSearch(0.03);
+
+      pcl::search::KdTree<pcl::PointXYZ>::Ptr kdtree(new pcl::search::KdTree<pcl::PointXYZ>);
+      normalEstimation.setSearchMethod(kdtree);
+      normalEstimation.compute(*normals);
+
+      // CRH estimation object.
+      pcl::CRHEstimation<pcl::PointXYZ, pcl::Normal, CRH90> crh;
+      crh.setInputCloud(object_cluster);
+      crh.setInputNormals(normals);
+      Eigen::Vector4f centroid;
+      pcl::compute3DCentroid(*object_cluster, centroid);
+      crh.setCentroid(centroid);
+
+      marker_array.markers[i].header.frame_id = input->header.frame_id;
+      marker_array.markers[i].header.stamp = ros::Time();
+      marker_array.markers[i].ns = "my_namespace";
+      marker_array.markers[i].id = i;
+      marker_array.markers[i].type = visualization_msgs::Marker::SPHERE;
+      marker_array.markers[i].action = visualization_msgs::Marker::ADD;
+      marker_array.markers[i].pose.position.x = centroid[0];
+      marker_array.markers[i].pose.position.y = centroid[1];
+      marker_array.markers[i].pose.position.z = centroid[2];
+      marker_array.markers[i].pose.orientation.x = 0.0;
+      marker_array.markers[i].pose.orientation.y = 0.0;
+      marker_array.markers[i].pose.orientation.z = 0.0;
+      marker_array.markers[i].pose.orientation.w = 1.0;
+      marker_array.markers[i].scale.x = 0.05;
+      marker_array.markers[i].scale.y = 0.05;
+      marker_array.markers[i].scale.z = 0.05;
+      marker_array.markers[i].color.a = 1.0;
+      marker_array.markers[i].color.r = 0.0;
+      marker_array.markers[i].color.g = 0.9;
+      marker_array.markers[i].color.b = 0.2;
+
+      geometry_msgs::Point Centroid_XYZ;
+      Centroid_XYZ.x = centroid[0];
+      Centroid_XYZ.y = centroid[1];
+      Centroid_XYZ.z = centroid[2];
+      i++;
+    }
+    object_markers_pub_.publish (marker_array);
+    
+  }
+  
+public:
+
+  SegmentTabletop(ros::NodeHandle* nodehandle):nh_(*nodehandle) {
+    init_params();
+    init_subs();
+    init_pubs();
+  }
+  
+};
+
+int main(int argc, char** argv) 
+{
+    ros::init(argc, argv, "segment_tabletop_node");
+    ros::NodeHandle node_handle("~");
+    SegmentTabletop segment_tabletop(&node_handle);
+    ros::spin();
+    return 0;
+} 

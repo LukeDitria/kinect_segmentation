@@ -129,6 +129,9 @@ include_directories(
 add_executable(segmentation src/example.cpp)
 target_link_libraries(segmentation ${catkin_LIBRARIES})
 
+add_executable(segment_tabletop src/segment_tabletop.cpp)
+target_link_libraries(segment_tabletop ${catkin_LIBRARIES})
+
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure

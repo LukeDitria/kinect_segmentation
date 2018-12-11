@@ -8,6 +8,8 @@
 #include <geometry_msgs/Point.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <tf/tf.h>
+#include <tf/transform_listener.h>
 
 //PCL
 #include <pcl_conversions/pcl_conversions.h>
@@ -33,6 +35,7 @@ private:
   ros::NodeHandle nh_;
   ros::Subscriber point_cloud_sub_;
   ros::Publisher object_markers_pub_;
+  tf::TransformListener listener;
   std::string point_cloud_topic;
   std::string out_object_markers_topic;
   visualization_msgs::MarkerArray marker_array;
@@ -159,15 +162,25 @@ private:
       pcl::compute3DCentroid(*object_cluster, centroid);
       crh.setCentroid(centroid);
 
-      marker_array.markers[i].header.frame_id = input->header.frame_id;
+      geometry_msgs::PointStamped Centroid_Camera_Link;
+      geometry_msgs::PointStamped Centroid_Base_Link;
+
+      Centroid_Camera_Link.header.frame_id = input->header.frame_id;
+      Centroid_Camera_Link.point.x = centroid[0];
+      Centroid_Camera_Link.point.y = centroid[1];
+      Centroid_Camera_Link.point.z = centroid[2];
+
+      listener.transformPoint("base_link",Centroid_Camera_Link,Centroid_Base_Link);
+
+      marker_array.markers[i].header.frame_id = Centroid_Base_Link.header.frame_id;
       marker_array.markers[i].header.stamp = ros::Time();
       marker_array.markers[i].ns = "my_namespace";
       marker_array.markers[i].id = i;
       marker_array.markers[i].type = visualization_msgs::Marker::SPHERE;
       marker_array.markers[i].action = visualization_msgs::Marker::ADD;
-      marker_array.markers[i].pose.position.x = centroid[0];
-      marker_array.markers[i].pose.position.y = centroid[1];
-      marker_array.markers[i].pose.position.z = centroid[2];
+      marker_array.markers[i].pose.position.x = Centroid_Base_Link.point.x;
+      marker_array.markers[i].pose.position.y = Centroid_Base_Link.point.y;
+      marker_array.markers[i].pose.position.z = Centroid_Base_Link.point.z;
       marker_array.markers[i].pose.orientation.x = 0.0;
       marker_array.markers[i].pose.orientation.y = 0.0;
       marker_array.markers[i].pose.orientation.z = 0.0;
@@ -180,10 +193,6 @@ private:
       marker_array.markers[i].color.g = 0.9;
       marker_array.markers[i].color.b = 0.2;
 
-      geometry_msgs::Point Centroid_XYZ;
-      Centroid_XYZ.x = centroid[0];
-      Centroid_XYZ.y = centroid[1];
-      Centroid_XYZ.z = centroid[2];
       i++;
     }
     object_markers_pub_.publish (marker_array);

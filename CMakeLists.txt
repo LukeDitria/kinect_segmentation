@@ -12,6 +12,8 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_ros
   roscpp
   sensor_msgs
+  genmsg
+  actionlib_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -62,17 +64,22 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate actions in the 'action' folder
-# add_action_files(
-#   FILES
+add_action_files(
+  DIRECTORY
+  action
+  FILES
+  ScanObjects.action
 #   Action1.action
 #   Action2.action
-# )
+)
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
+ generate_messages(
+   DEPENDENCIES
+   actionlib_msgs
+   geometry_msgs
 #   std_msgs
-# )
+ )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -126,11 +133,14 @@ include_directories(
 #   src/${PROJECT_NAME}/kinect_segmentation.cpp
 # )
 
-add_executable(segmentation src/example.cpp)
-target_link_libraries(segmentation ${catkin_LIBRARIES})
+add_executable(scan_objects src/scan_objects_server.cpp)
+target_link_libraries(scan_objects ${catkin_LIBRARIES})
 
-add_executable(segment_tabletop src/segment_tabletop.cpp)
-target_link_libraries(segment_tabletop ${catkin_LIBRARIES})
+#add_executable(segmentation src/example.cpp)
+#target_link_libraries(segmentation ${catkin_LIBRARIES})
+
+#add_executable(segment_tabletop src/segment_tabletop.cpp)
+#target_link_libraries(segment_tabletop ${catkin_LIBRARIES})
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries

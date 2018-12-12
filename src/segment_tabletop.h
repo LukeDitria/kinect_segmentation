@@ -10,6 +10,7 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <tf/tf.h>
 #include <tf/transform_listener.h>
+#include <actionlib/server/simple_action_server.h>
 
 //PCL
 #include <pcl_conversions/pcl_conversions.h>
@@ -27,11 +28,13 @@
 #include <pcl/features/crh.h>
 #include <pcl/common/transforms.h>
 
+//CUSTOM
+#include <kinect_segmentation/ScanObjectsAction.h>
 typedef pcl::Histogram<90> CRH90;
 
 class SegmentTabletop {
-private:
 
+ private:
   ros::NodeHandle nh_;
   ros::Subscriber point_cloud_sub_;
   ros::Publisher object_markers_pub_;
@@ -39,7 +42,7 @@ private:
   std::string point_cloud_topic;
   std::string out_object_markers_topic;
   visualization_msgs::MarkerArray marker_array;
-
+  actionlib::SimpleActionServer<kinect_segmentation::ScanObjectsAction> as_;
   
   void init_params(){    
     nh_.getParam("point_cloud_topic", point_cloud_topic);
@@ -50,6 +53,14 @@ private:
   }
   void init_pubs(){
     object_markers_pub_ = nh_.advertise<visualization_msgs::MarkerArray> (out_object_markers_topic, 1);
+  }
+  void init_actionlib(){
+    as_.start();
+    ROS_INFO("Scan Objects Server ON");
+  }
+  void executeCB(const actionlib::SimpleActionServer<kinect_segmentation::ScanObjectsAction>::GoalConstPtr& goal)
+  {
+    as_.setSucceeded();
   }
   void cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input){
     ROS_INFO("cloud_cb");
@@ -193,7 +204,9 @@ private:
       marker_array.markers[i].color.g = 0.9;
       marker_array.markers[i].color.b = 0.2;
 
-      i++;
+      kinect_segmentation::ScanObjectsAction action;
+
+      i++;            
     }
     object_markers_pub_.publish (marker_array);
     
@@ -201,19 +214,11 @@ private:
   
 public:
 
-  SegmentTabletop(ros::NodeHandle* nodehandle):nh_(*nodehandle) {
+ SegmentTabletop(ros::NodeHandle* nodehandle):nh_(*nodehandle), as_(nh_, "scan_objects_server", boost::bind(&SegmentTabletop::executeCB, this, _1),false) {
     init_params();
     init_subs();
     init_pubs();
+    init_actionlib();
   }
   
 };
-
-int main(int argc, char** argv) 
-{
-    ros::init(argc, argv, "segment_tabletop_node");
-    ros::NodeHandle node_handle("~");
-    SegmentTabletop segment_tabletop(&node_handle);
-    ros::spin();
-    return 0;
-} 

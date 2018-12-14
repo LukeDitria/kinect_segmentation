@@ -1,6 +1,8 @@
 //System
 #include <iostream>
 #include <math.h>
+#include <mutex>
+#include <thread>
 
 //ROS
 #include <ros/ros.h>
@@ -43,13 +45,15 @@ class SegmentTabletop {
   std::string out_object_markers_topic;
   visualization_msgs::MarkerArray marker_array;
   actionlib::SimpleActionServer<kinect_segmentation::ScanObjectsAction> as_;
+  sensor_msgs::PointCloud2 input_cloud;
+  std::mutex cloud_mutex;
   
   void init_params(){    
     nh_.getParam("point_cloud_topic", point_cloud_topic);
     nh_.getParam("out_object_markers_topic", out_object_markers_topic);
   }  
   void init_subs(){
-    point_cloud_sub_ = nh_.subscribe(point_cloud_topic, 1, &SegmentTabletop::cloud_cb, this); 
+    point_cloud_sub_ = nh_.subscribe(point_cloud_topic, 1, &SegmentTabletop::cloudCB, this); 
   }
   void init_pubs(){
     object_markers_pub_ = nh_.advertise<visualization_msgs::MarkerArray> (out_object_markers_topic, 1);
@@ -57,13 +61,17 @@ class SegmentTabletop {
   void init_actionlib(){
     as_.start();
     ROS_INFO("Scan Objects Server ON");
+  }      
+  void cloudCB (const sensor_msgs::PointCloud2ConstPtr& input) {
+    std::lock_guard<std::mutex> lock{cloud_mutex};
+    input_cloud = *input;
   }
-  void executeCB(const actionlib::SimpleActionServer<kinect_segmentation::ScanObjectsAction>::GoalConstPtr& goal)
-  {
-    as_.setSucceeded();
-  }
-  void cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input){
-    ROS_INFO("cloud_cb");
+  void executeCB(const actionlib::SimpleActionServer<kinect_segmentation::ScanObjectsAction>::GoalConstPtr& goal){
+    std::lock_guard<std::mutex> lock{cloud_mutex};
+    ROS_INFO("executeCB: ScanObjects");        
+    
+    kinect_segmentation::ScanObjectsResult result_;
+    
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
     pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients ());
     pcl::PointIndices::Ptr inliers (new pcl::PointIndices ());
@@ -73,7 +81,7 @@ class SegmentTabletop {
     pcl::PointCloud<pcl::PointXYZ>::Ptr convexHull(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::PointCloud<pcl::PointXYZ>::Ptr objects(new pcl::PointCloud<pcl::PointXYZ>);
 
-    pcl::fromROSMsg (*input, *cloud);
+    pcl::fromROSMsg (input_cloud, *cloud);
 
     //fit a plane to the point cloud
     seg.setOptimizeCoefficients (true); // Optional
@@ -86,10 +94,11 @@ class SegmentTabletop {
 
     if (inliers->indices.size() == 0) {      
       std::cout << "Could not find a plane in the scene." << std::endl;
+      as_.setAborted(result_);
       return;
     }
 
-    std::cout << "Plane Found" << std::endl;
+    //std::cout << "Plane Found" << std::endl;
 
     // Create the filtering object
     pcl::ExtractIndices<pcl::PointXYZ> extract;
@@ -125,10 +134,11 @@ class SegmentTabletop {
     // Get and show all points retrieved by the hull.
     extract.setIndices(objectIndices);
     extract.filter(*objects);
-
+    
     if (objectIndices->indices.size() == 0) {
-	    std::cout << "No Objects in the scene." << std::endl;
-	    return;
+      //std::cout << "No Objects in the scene." << std::endl;
+      as_.setAborted(result_);
+      return;
     }
     
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
@@ -143,7 +153,7 @@ class SegmentTabletop {
     ec.extract (cluster_indices);
 
     marker_array.markers.resize(cluster_indices.size());
-    std::cout<<cluster_indices.size() << " Objects Found.."<<std::endl;
+    //std::cout<<cluster_indices.size() << " Objects Found.."<<std::endl;
 
 
     int i = 0;
@@ -176,7 +186,7 @@ class SegmentTabletop {
       geometry_msgs::PointStamped Centroid_Camera_Link;
       geometry_msgs::PointStamped Centroid_Base_Link;
 
-      Centroid_Camera_Link.header.frame_id = input->header.frame_id;
+      Centroid_Camera_Link.header.frame_id = input_cloud.header.frame_id;
       Centroid_Camera_Link.point.x = centroid[0];
       Centroid_Camera_Link.point.y = centroid[1];
       Centroid_Camera_Link.point.z = centroid[2];
@@ -188,6 +198,8 @@ class SegmentTabletop {
       float Z_pos = Centroid_Camera_Link.point.z;
       //filter out anything that could be the base of the robot
       if sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > 0.3) {
+        
+        result_.centroids.push_back(Centroid_Base_Link);
 
         marker_array.markers[i].header.frame_id = Centroid_Base_Link.header.frame_id;
         marker_array.markers[i].header.stamp = ros::Time();
@@ -214,13 +226,13 @@ class SegmentTabletop {
         i++;          
       }  
     }
-    object_markers_pub_.publish (marker_array);
-    
+    object_markers_pub_.publish (marker_array);    
+    as_.setSucceeded(result_);
   }
   
 public:
 
- SegmentTabletop(ros::NodeHandle* nodehandle):nh_(*nodehandle), as_(nh_, "scan_objects_server", boost::bind(&SegmentTabletop::executeCB, this, _1),false) {
+ SegmentTabletop(ros::NodeHandle* nodehandle): nh_(*nodehandle), as_(nh_, "/scan_objects", boost::bind(&SegmentTabletop::executeCB, this, _1),false) {
     init_params();
     init_subs();
     init_pubs();

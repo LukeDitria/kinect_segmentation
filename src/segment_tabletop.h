@@ -47,10 +47,12 @@ class SegmentTabletop {
   actionlib::SimpleActionServer<kinect_segmentation::ScanObjectsAction> as_;
   sensor_msgs::PointCloud2 input_cloud;
   std::mutex cloud_mutex;
+  double filter_base_link_radius;
   
   void init_params(){    
     nh_.getParam("point_cloud_topic", point_cloud_topic);
     nh_.getParam("out_object_markers_topic", out_object_markers_topic);
+    nh_.getParam("filter_base_link_radius", filter_base_link_radius);
   }  
   void init_subs(){
     point_cloud_sub_ = nh_.subscribe(point_cloud_topic, 1, &SegmentTabletop::cloudCB, this); 
@@ -197,7 +199,7 @@ class SegmentTabletop {
       float Y_pos = Centroid_Camera_Link.point.y;
       float Z_pos = Centroid_Camera_Link.point.z;
       //filter out anything that could be the base of the robot
-      if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > 0.3) {
+      if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > filter_base_link_radius) {
         
         result_.centroids.push_back(Centroid_Base_Link);
 

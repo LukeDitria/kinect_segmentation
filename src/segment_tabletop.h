@@ -197,7 +197,7 @@ class SegmentTabletop {
       float Y_pos = Centroid_Camera_Link.point.y;
       float Z_pos = Centroid_Camera_Link.point.z;
       //filter out anything that could be the base of the robot
-      if sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > 0.3) {
+      if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > 0.3) {
         
         result_.centroids.push_back(Centroid_Base_Link);
 

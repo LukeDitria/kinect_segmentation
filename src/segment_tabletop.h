@@ -127,8 +127,8 @@ class SegmentTabletop {
     extract.filter(*objects);
 
     if (objectIndices->indices.size() == 0) {
-	std::cout << "No Objects in the scene." << std::endl;
-	return;
+	    std::cout << "No Objects in the scene." << std::endl;
+	    return;
     }
     
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
@@ -180,33 +180,39 @@ class SegmentTabletop {
       Centroid_Camera_Link.point.x = centroid[0];
       Centroid_Camera_Link.point.y = centroid[1];
       Centroid_Camera_Link.point.z = centroid[2];
-
+      //transform point o base_link frame
       listener.transformPoint("base_link",Centroid_Camera_Link,Centroid_Base_Link);
 
-      marker_array.markers[i].header.frame_id = Centroid_Base_Link.header.frame_id;
-      marker_array.markers[i].header.stamp = ros::Time();
-      marker_array.markers[i].ns = "my_namespace";
-      marker_array.markers[i].id = i;
-      marker_array.markers[i].type = visualization_msgs::Marker::SPHERE;
-      marker_array.markers[i].action = visualization_msgs::Marker::ADD;
-      marker_array.markers[i].pose.position.x = Centroid_Base_Link.point.x;
-      marker_array.markers[i].pose.position.y = Centroid_Base_Link.point.y;
-      marker_array.markers[i].pose.position.z = Centroid_Base_Link.point.z;
-      marker_array.markers[i].pose.orientation.x = 0.0;
-      marker_array.markers[i].pose.orientation.y = 0.0;
-      marker_array.markers[i].pose.orientation.z = 0.0;
-      marker_array.markers[i].pose.orientation.w = 1.0;
-      marker_array.markers[i].scale.x = 0.05;
-      marker_array.markers[i].scale.y = 0.05;
-      marker_array.markers[i].scale.z = 0.05;
-      marker_array.markers[i].color.a = 1.0;
-      marker_array.markers[i].color.r = 0.0;
-      marker_array.markers[i].color.g = 0.9;
-      marker_array.markers[i].color.b = 0.2;
+      float X_pos = Centroid_Camera_Link.point.x;
+      float Y_pos = Centroid_Camera_Link.point.y;
+      float Z_pos = Centroid_Camera_Link.point.z;
+      //filter out anything that could be the base of the robot
+      if sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > 0.3) {
 
-      kinect_segmentation::ScanObjectsAction action;
+        marker_array.markers[i].header.frame_id = Centroid_Base_Link.header.frame_id;
+        marker_array.markers[i].header.stamp = ros::Time();
+        marker_array.markers[i].ns = "my_namespace";
+        marker_array.markers[i].id = i;
+        marker_array.markers[i].type = visualization_msgs::Marker::SPHERE;
+        marker_array.markers[i].action = visualization_msgs::Marker::ADD;
+        marker_array.markers[i].pose.position.x = X_pos;
+        marker_array.markers[i].pose.position.y = Y_pos;
+        marker_array.markers[i].pose.position.z = Z_pos;
+        marker_array.markers[i].pose.orientation.x = 0.0;
+        marker_array.markers[i].pose.orientation.y = 0.0;
+        marker_array.markers[i].pose.orientation.z = 0.0;
+        marker_array.markers[i].pose.orientation.w = 1.0;
+        marker_array.markers[i].scale.x = 0.05;
+        marker_array.markers[i].scale.y = 0.05;
+        marker_array.markers[i].scale.z = 0.05;
+        marker_array.markers[i].color.a = 1.0;
+        marker_array.markers[i].color.r = 0.0;
+        marker_array.markers[i].color.g = 0.9;
+        marker_array.markers[i].color.b = 0.2;
 
-      i++;            
+        kinect_segmentation::ScanObjectsAction action;
+        i++;          
+      }  
     }
     object_markers_pub_.publish (marker_array);
     

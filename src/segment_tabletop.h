@@ -195,9 +195,9 @@ class SegmentTabletop {
       //transform point o base_link frame
       listener.transformPoint("base_link",Centroid_Camera_Link,Centroid_Base_Link);
 
-      float X_pos = Centroid_Camera_Link.point.x;
-      float Y_pos = Centroid_Camera_Link.point.y;
-      float Z_pos = Centroid_Camera_Link.point.z;
+      float X_pos = Centroid_Base_Link.point.x;
+      float Y_pos = Centroid_Base_Link.point.y;
+      float Z_pos = Centroid_Base_Link.point.z;
       //filter out anything that could be the base of the robot
       if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > filter_base_link_radius) {
         
@@ -205,7 +205,7 @@ class SegmentTabletop {
 
         marker_array.markers[i].header.frame_id = Centroid_Base_Link.header.frame_id;
         marker_array.markers[i].header.stamp = ros::Time();
-        marker_array.markers[i].ns = "my_namespace";
+        //marker_array.markers[i].ns = "my_namespace";
         marker_array.markers[i].id = i;
         marker_array.markers[i].type = visualization_msgs::Marker::SPHERE;
         marker_array.markers[i].action = visualization_msgs::Marker::ADD;

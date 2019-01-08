@@ -3,6 +3,11 @@
 #include <math.h>
 #include <mutex>
 #include <thread>
+#include <vector>
+#include <algorithm> 
+#include <functional>
+#include <Eigen/Dense>
+#include <Eigen/Eigenvalues> 
 
 //ROS
 #include <ros/ros.h>
@@ -32,7 +37,11 @@
 
 //CUSTOM
 #include <kinect_segmentation/ScanObjectsAction.h>
+
 typedef pcl::Histogram<90> CRH90;
+
+//GLOBAL VARIABLES
+float cylinder_offset = 0.025;
 
 class SegmentTabletop {
 
@@ -40,6 +49,7 @@ class SegmentTabletop {
   ros::NodeHandle nh_;
   ros::Subscriber point_cloud_sub_;
   ros::Publisher object_markers_pub_;
+  tf::TransformListener transformer;
   tf::TransformListener listener;
   std::string point_cloud_topic;
   std::string out_object_markers_topic;
@@ -74,14 +84,14 @@ class SegmentTabletop {
     
     kinect_segmentation::ScanObjectsResult result_;
     
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
     pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients ());
     pcl::PointIndices::Ptr inliers (new pcl::PointIndices ());
 
     // Create the segmentation object
-    pcl::SACSegmentation<pcl::PointXYZ> seg;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr convexHull(new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::PointCloud<pcl::PointXYZ>::Ptr objects(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::SACSegmentation<pcl::PointXYZRGB> seg;
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr convexHull(new pcl::PointCloud<pcl::PointXYZRGB>);
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr objects(new pcl::PointCloud<pcl::PointXYZRGB>);
 
     pcl::fromROSMsg (input_cloud, *cloud);
 
@@ -103,9 +113,9 @@ class SegmentTabletop {
     //std::cout << "Plane Found" << std::endl;
 
     // Create the filtering object
-    pcl::ExtractIndices<pcl::PointXYZ> extract;
-    //filtered point cloud
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_inliers (new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::ExtractIndices<pcl::PointXYZRGB> extract;
+    // Filtered point cloud
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_inliers (new pcl::PointCloud<pcl::PointXYZRGB>);
     
     extract.setInputCloud (cloud);
     extract.setIndices (inliers);
@@ -113,7 +123,7 @@ class SegmentTabletop {
     extract.filter (*cloud_inliers);
 
     // Retrieve the convex hull.
-    pcl::ConvexHull<pcl::PointXYZ> hull;
+    pcl::ConvexHull<pcl::PointXYZRGB> hull;
     hull.setInputCloud(cloud_inliers);
 
     // Make sure that the resulting hull is bidimensional.
@@ -121,13 +131,13 @@ class SegmentTabletop {
     hull.reconstruct(*convexHull);
 
     // Prism object from convex hull
-    pcl::ExtractPolygonalPrismData<pcl::PointXYZ> prism;
+    pcl::ExtractPolygonalPrismData<pcl::PointXYZRGB> prism;
     prism.setInputCloud(cloud);
     prism.setInputPlanarHull(convexHull);
     
     // First parameter: minimum Z value. Set to 0, segments objects lying on the plane (can be negative).
     // Second parameter: maximum Z value, set to 10cm. Tune it according to the height of the objects you expect.
-    prism.setHeightLimits(0.02f, 0.5f); // Min then Max
+    prism.setHeightLimits(0.02f, 0.1f); // Min then Max
     //prism.setHeightLimits(-0.5f,-0.02f); // Min then Max
     pcl::PointIndices::Ptr objectIndices(new pcl::PointIndices);
 
@@ -143,63 +153,82 @@ class SegmentTabletop {
       return;
     }
     
-    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+    pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB>);
     tree->setInputCloud (objects);
     std::vector<pcl::PointIndices> cluster_indices;
-    pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+    pcl::EuclideanClusterExtraction<pcl::PointXYZRGB> ec;
     ec.setClusterTolerance (0.02); // 2cm
     ec.setMinClusterSize (100);
-    ec.setMaxClusterSize (25000);
+    ec.setMaxClusterSize (15000); //25000
     ec.setSearchMethod (tree);
     ec.setInputCloud (objects);
     ec.extract (cluster_indices);
 
     marker_array.markers.resize(cluster_indices.size());
     //std::cout<<cluster_indices.size() << " Objects Found.."<<std::endl;
-
-
+    
+    
     int i = 0;
     for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it) {
-      pcl::PointCloud<pcl::PointXYZ>::Ptr object_cluster (new pcl::PointCloud<pcl::PointXYZ>);
+      pcl::PointCloud<pcl::PointXYZRGB>::Ptr object_cluster (new pcl::PointCloud<pcl::PointXYZRGB>);
+      float avg_r = 0, avg_g = 0, avg_b = 0, counter = 0;
+      
+
       for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit){
-	object_cluster->points.push_back (objects->points[*pit]); //*
+        // Summing up rgb values of points in object_cluster point clouds
+        avg_r += objects->points[*pit].r;
+        avg_g += objects->points[*pit].g;
+        avg_b += objects->points[*pit].b;  
+
+        object_cluster->points.push_back (objects->points[*pit]); //*
+        
+        counter++;
       }
+
+      // Finding average rgb values of cylinders and avg z value
+      avg_r = avg_r/counter, avg_g = avg_g/counter, avg_b = avg_b/counter;
+      
       object_cluster->width = object_cluster->points.size ();
       object_cluster->height = 1;
       object_cluster->is_dense = true;
 
-      pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normalEstimation;
+      
+      pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> normalEstimation;
       pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
       normalEstimation.setInputCloud(object_cluster);
       normalEstimation.setRadiusSearch(0.03);
 
-      pcl::search::KdTree<pcl::PointXYZ>::Ptr kdtree(new pcl::search::KdTree<pcl::PointXYZ>);
+      pcl::search::KdTree<pcl::PointXYZRGB>::Ptr kdtree(new pcl::search::KdTree<pcl::PointXYZRGB>);
       normalEstimation.setSearchMethod(kdtree);
       normalEstimation.compute(*normals);
 
       // CRH estimation object.
-      pcl::CRHEstimation<pcl::PointXYZ, pcl::Normal, CRH90> crh;
+      pcl::CRHEstimation<pcl::PointXYZRGB, pcl::Normal, CRH90> crh;
       crh.setInputCloud(object_cluster);
       crh.setInputNormals(normals);
       Eigen::Vector4f centroid;
       pcl::compute3DCentroid(*object_cluster, centroid);
       crh.setCentroid(centroid);
+	
 
       geometry_msgs::PointStamped Centroid_Camera_Link;
       geometry_msgs::PointStamped Centroid_Base_Link;
+
 
       Centroid_Camera_Link.header.frame_id = input_cloud.header.frame_id;
       Centroid_Camera_Link.point.x = centroid[0];
       Centroid_Camera_Link.point.y = centroid[1];
       Centroid_Camera_Link.point.z = centroid[2];
-      //transform point o base_link frame
+      //transform point to base_link frame
       listener.transformPoint("base_link",Centroid_Camera_Link,Centroid_Base_Link);
+
+
 
       float X_pos = Centroid_Base_Link.point.x;
       float Y_pos = Centroid_Base_Link.point.y;
       float Z_pos = Centroid_Base_Link.point.z;
-      //filter out anything that could be the base of the robot
-      if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > filter_base_link_radius) {
+      //filter out anything that could be the base of the robot or the gripper
+      if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > filter_base_link_radius ){
         
         result_.centroids.push_back(Centroid_Base_Link);
 
@@ -209,9 +238,18 @@ class SegmentTabletop {
         marker_array.markers[i].id = i;
         marker_array.markers[i].type = visualization_msgs::Marker::SPHERE;
         marker_array.markers[i].action = visualization_msgs::Marker::ADD;
-        marker_array.markers[i].pose.position.x = X_pos;
-        marker_array.markers[i].pose.position.y = Y_pos;
-        marker_array.markers[i].pose.position.z = Z_pos;
+        
+        // Positioning markers 
+        float x_offset = X_pos * (cylinder_offset/sqrt(X_pos*X_pos+Y_pos*Y_pos));
+        float y_offset = Y_pos * (cylinder_offset/sqrt(X_pos*X_pos+Y_pos*Y_pos));
+        marker_array.markers[i].pose.position.x = X_pos - x_offset;
+        if(X_pos > 0){
+        	marker_array.markers[i].pose.position.y = Y_pos - y_offset;
+        }
+        else{
+        	marker_array.markers[i].pose.position.y = Y_pos + y_offset;
+        }
+		
         marker_array.markers[i].pose.orientation.x = 0.0;
         marker_array.markers[i].pose.orientation.y = 0.0;
         marker_array.markers[i].pose.orientation.z = 0.0;
@@ -220,9 +258,18 @@ class SegmentTabletop {
         marker_array.markers[i].scale.y = 0.05;
         marker_array.markers[i].scale.z = 0.05;
         marker_array.markers[i].color.a = 1.0;
-        marker_array.markers[i].color.r = 0.0;
-        marker_array.markers[i].color.g = 0.9;
-        marker_array.markers[i].color.b = 0.2;
+        //ROS_INFO("This is centroid number %.4f", i);
+        
+        // Identifying cylinder colour
+        marker_array.markers[i].color.g = 0.0;
+        if(avg_r < avg_b){
+          marker_array.markers[i].color.r = 1.0;
+          marker_array.markers[i].color.b = 0.0;
+        }
+        else{
+          marker_array.markers[i].color.r = 0.0;
+          marker_array.markers[i].color.b = 1.0;
+        }
 
         kinect_segmentation::ScanObjectsAction action;
         i++;          

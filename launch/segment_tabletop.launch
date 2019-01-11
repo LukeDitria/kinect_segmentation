@@ -1,6 +1,6 @@
 <launch>
  <node name="scan_objects" pkg="kinect_segmentation" type="scan_objects" output="screen">
-       <param name="point_cloud_topic" value ="/camera/depth/points"/>
+       <param name="point_cloud_topic" value ="/camera/depth_registered/points"/>
        <param name="out_object_markers_topic" value ="object_markers"/>
        <param name="filter_base_link_radius" value="0.3"/>
  </node>

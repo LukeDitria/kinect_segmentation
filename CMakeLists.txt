@@ -13,11 +13,13 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
   genmsg
+  actionlib
   actionlib_msgs
+
 )
 
 ## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
+ find_package(Boost REQUIRED COMPONENTS system)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -78,7 +80,7 @@ add_action_files(
    DEPENDENCIES
    actionlib_msgs
    geometry_msgs
-#   std_msgs
+   std_msgs
  )
 
 ################################################
@@ -115,6 +117,7 @@ catkin_package(
 #  LIBRARIES kinect_segmentation
 #  CATKIN_DEPENDS roscpp rospy std_msgs
 #  DEPENDS system_lib
+   CATKIN_DEPENDS actionlib_msgs
 )
 
 ###########
@@ -123,10 +126,8 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-include_directories(
-# include
-  ${catkin_INCLUDE_DIRS}
-)
+
+include_directories(include ${catkin_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
@@ -145,6 +146,12 @@ target_link_libraries(scan_objects ${catkin_LIBRARIES})
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
+
+add_dependencies(
+  scan_objects
+  ${kinect_segmentation_EXPORTED_TARGETS}
+)
+
 # add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable

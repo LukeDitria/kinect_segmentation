@@ -181,6 +181,8 @@ class SegmentTabletop {
         avg_r += objects->points[*pit].r;
         avg_g += objects->points[*pit].g;
         avg_b += objects->points[*pit].b; 
+
+
         counter++;
 
         object_cluster->points.push_back (objects->points[*pit]); 
@@ -190,12 +192,12 @@ class SegmentTabletop {
         camera_temp.point.y = objects->points[*pit].y;
         camera_temp.point.z = objects->points[*pit].z;
 
-     	//transform point to base_link frame
-     	listener.transformPoint("base_link",camera_temp,base_temp);
+      //transform point to base_link frame
+      listener.transformPoint("base_link",camera_temp,base_temp);
 
-     	x_vals.push_back(base_temp.point.x); 
-		y_vals.push_back(base_temp.point.y);
-		z_avg += base_temp.point.z; 
+      x_vals.push_back(base_temp.point.x); 
+    y_vals.push_back(base_temp.point.y);
+    z_avg += base_temp.point.z; 
       }
 
       // Finding average rgb values and z value of cylinder
@@ -209,12 +211,12 @@ class SegmentTabletop {
 
       // D = [x.*x, x.*y, y.*y, x, y, ones];
       for(int i=0; i<x_vals.size(); i++){
-      	D_mat(i,0) = x_vals[i]*x_vals[i];
-      	D_mat(i,1) = x_vals[i]*y_vals[i];
-      	D_mat(i,2) = y_vals[i]*y_vals[i];
-      	D_mat(i,3) = x_vals[i];
-      	D_mat(i,4) = y_vals[i];
-      	D_mat(i,5) = 1.0;
+        D_mat(i,0) = x_vals[i]*x_vals[i];
+        D_mat(i,1) = x_vals[i]*y_vals[i];
+        D_mat(i,2) = y_vals[i]*y_vals[i];
+        D_mat(i,3) = x_vals[i];
+        D_mat(i,4) = y_vals[i];
+        D_mat(i,5) = 1.0;
       }
       
       D_mat_trans = D_mat.transpose();
@@ -228,34 +230,34 @@ class SegmentTabletop {
       // Finding positive eigenvalue
       int posEigen;
       for(int i=0; i<es.eigenvalues().size(); i++){
-      	if(es.eigenvalues().real()[i]>0.01){
-      		posEigen = i;
-      		//std::cout << "\nEigenvalue: ";
-	  		//std::cout << es.eigenvalues().real()[i];
-	  		//std::cout << "\nEigenvectors: ";
-	  		//std::cout << es.eigenvectors().real().col(i);
-      	}
+        if(es.eigenvalues().real()[i]>0.01){
+          posEigen = i;
+          //std::cout << "\nEigenvalue: ";
+        //std::cout << es.eigenvalues().real()[i];
+        //std::cout << "\nEigenvectors: ";
+        //std::cout << es.eigenvectors().real().col(i);
+        }
       }
       
       // Finding the centre of the fitted ellipse
-      float a,b,c,d,f, g, x0, y0, R = 0;
+      float a,b,c,d,e,x0,y0,R = 0;
       a = es.eigenvectors().real().col(posEigen)[0];
       b = es.eigenvectors().real().col(posEigen)[1]/2.0;
       c = es.eigenvectors().real().col(posEigen)[2];
       d = es.eigenvectors().real().col(posEigen)[3]/2.0;
-      f = es.eigenvectors().real().col(posEigen)[4]/2.0;
-      g = es.eigenvectors().real().col(posEigen)[5];
-      x0=(c*d-b*f)/(b*b-a*c);
-      y0=(a*f-b*d)/(b*b-a*c);
+      e = es.eigenvectors().real().col(posEigen)[4]/2.0;
+      
+      x0=(c*d-b*e)/(b*b-a*c);
+      y0=(a*e-b*d)/(b*b-a*c);
 
       //Finding radius of cylinder
       for(int i=0; i<x_vals.size(); i++){
-      	R += (x0 - x_vals[i])*(x0 - x_vals[i]) + (y0 - y_vals[i])*(y0 - y_vals[i]);
+        R += (x0 - x_vals[i])*(x0 - x_vals[i]) + (y0 - y_vals[i])*(y0 - y_vals[i]);
       }
       R = R/x_vals.size();
       R = sqrt(R);
 
-	  
+    
       object_cluster->width = object_cluster->points.size ();
       object_cluster->height = 1;
       object_cluster->is_dense = true;
@@ -277,7 +279,7 @@ class SegmentTabletop {
       Eigen::Vector4f centroid;
       pcl::compute3DCentroid(*object_cluster, centroid);
       crh.setCentroid(centroid);
-	  */
+    */
 
       geometry_msgs::PointStamped Centroid_Camera_Link;
       geometry_msgs::PointStamped Centroid_Base_Link;
@@ -297,8 +299,8 @@ class SegmentTabletop {
       float X_pos = Centroid_Base_Link.point.x;
       float Y_pos = Centroid_Base_Link.point.y;
       float Z_pos = Centroid_Base_Link.point.z;
-      // filter out anything that could be the base of the robot or the gripper
-      if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > filter_base_link_radius ){
+      // filter out anything that could be the base of the robot or the gripper or behind the gripper
+      if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > filter_base_link_radius && X_pos < 0){
         
         result_.centroids.push_back(Centroid_Base_Link);
 
@@ -317,12 +319,12 @@ class SegmentTabletop {
         float y_offset = Y_pos * (cylinder_offset/sqrt(X_pos*X_pos+Y_pos*Y_pos));
         marker_array.markers[i].pose.position.x = X_pos - x_offset;
         if(X_pos > 0){
-        	marker_array.markers[i].pose.position.y = Y_pos - y_offset;
+          marker_array.markers[i].pose.position.y = Y_pos - y_offset;
         }
         else{
-        	marker_array.markers[i].pose.position.y = Y_pos + y_offset;
+          marker_array.markers[i].pose.position.y = Y_pos + y_offset;
         }
-		*/
+    */
         
         marker_array.markers[i].pose.position.x = X_pos;
         marker_array.markers[i].pose.position.y = Y_pos;
@@ -331,15 +333,22 @@ class SegmentTabletop {
         marker_array.markers[i].pose.orientation.y = 0.0;
         marker_array.markers[i].pose.orientation.z = 0.0;
         marker_array.markers[i].pose.orientation.w = 1.0;
-        marker_array.markers[i].scale.x = 2*R;
-        marker_array.markers[i].scale.y = 2*R;
+        marker_array.markers[i].scale.x = 0.06;//2*R;
+        marker_array.markers[i].scale.y = 0.06;//2*R;
         marker_array.markers[i].scale.z = 0.12;//4*Z_pos;
         marker_array.markers[i].color.a = 1.0;
         //ROS_INFO("This is centroid number %.4f", i);
         
-        // Identifying cylinder colour
+        std::cout << "\nRed: ";
+        std::cout << avg_r;
+        std::cout << "\nGreen: ";
+        std::cout << avg_g;
+        std::cout << "\nBlue: ";
+        std::cout << avg_b;
+
+        // Identifying cylinder colour - NEEDS TO BE CALIBRATED
         marker_array.markers[i].color.g = 0.0;
-        if(avg_r < avg_b){
+        if(avg_r > avg_b){
           marker_array.markers[i].color.r = 1.0;
           marker_array.markers[i].color.b = 0.0;
         }

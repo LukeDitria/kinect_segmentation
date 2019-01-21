@@ -8,6 +8,6 @@
 
      <!-- <node name="rviz" pkg="rviz" type="rviz" output="screen"/>-->
 
- <node name="segmentation_node" pkg="kinect_segmentation" type="segmentation" args="/camera/depth/points" output="screen"/> 
+ <node name="segmentation_node" pkg="kinect_segmentation" type="segmentation" args="/camera/depth_registered/points" output="screen"/> 
 
 </launch>

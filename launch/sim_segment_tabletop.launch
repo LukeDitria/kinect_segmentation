@@ -1,0 +1,17 @@
+<launch>
+ <node name="scan_objects" pkg="kinect_segmentation" type="scan_objects" output="screen">
+       <param name="point_cloud_topic" value ="/camera/depth/points"/>
+       <param name="out_object_markers_topic" value ="object_markers"/>
+       <param name="out_goal_markers_topic" value ="goal_markers"/>
+       <param name="filter_base_link_radius" value="0.3"/>
+       <param name="simulation" value="true"/>
+
+       <param name="redGoal_x" value ="-0.250251691099"/>
+       <param name="redGoal_y" value ="-0.0662286786567"/>
+       <param name="redGoal_z" value ="0.975419795807"/>
+
+       <param name="blueGoal_x" value ="0.191308843501"/>
+       <param name="blueGoal_y" value ="-0.106047082054"/>
+       <param name="blueGoal_z" value ="1.01049386646"/>
+ </node>
+</launch>

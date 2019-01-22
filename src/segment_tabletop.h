@@ -48,25 +48,42 @@ class SegmentTabletop {
   ros::NodeHandle nh_;
   ros::Subscriber point_cloud_sub_;
   ros::Publisher object_markers_pub_;
+
+  ros::Publisher goal_markers_pub_;
   tf::TransformListener listener;
   std::string point_cloud_topic;
   std::string out_object_markers_topic;
+
+  std::string out_goal_markers_topic;
   visualization_msgs::MarkerArray marker_array;
+  visualization_msgs::MarkerArray goals_array;
   actionlib::SimpleActionServer<kinect_segmentation::ScanObjectsAction> as_;
   sensor_msgs::PointCloud2 input_cloud;
   std::mutex cloud_mutex;
   double filter_base_link_radius;
-  
+  double redGoal_x, redGoal_y, redGoal_z, blueGoal_x, blueGoal_y, blueGoal_z;
+  bool simulation;
+
   void init_params(){    
     nh_.getParam("point_cloud_topic", point_cloud_topic);
     nh_.getParam("out_object_markers_topic", out_object_markers_topic);
     nh_.getParam("filter_base_link_radius", filter_base_link_radius);
+    nh_.getParam("out_goal_markers_topic", out_goal_markers_topic);
+    nh_.getParam("redGoal_x", redGoal_x);
+    nh_.getParam("redGoal_y", redGoal_y);
+    nh_.getParam("redGoal_z", redGoal_z);
+    nh_.getParam("blueGoal_x", blueGoal_x);
+    nh_.getParam("blueGoal_y", blueGoal_y);
+    nh_.getParam("blueGoal_z", blueGoal_z);
+    nh_.getParam("simulation", simulation);
+
   }  
   void init_subs(){
     point_cloud_sub_ = nh_.subscribe(point_cloud_topic, 1, &SegmentTabletop::cloudCB, this); 
   }
   void init_pubs(){
     object_markers_pub_ = nh_.advertise<visualization_msgs::MarkerArray> (out_object_markers_topic, 1);
+    goal_markers_pub_ = nh_.advertise<visualization_msgs::MarkerArray> (out_goal_markers_topic, 1);
   }
   void init_actionlib(){
     as_.start();
@@ -79,6 +96,15 @@ class SegmentTabletop {
   void executeCB(const actionlib::SimpleActionServer<kinect_segmentation::ScanObjectsAction>::GoalConstPtr& goal){
     std::lock_guard<std::mutex> lock{cloud_mutex};
     ROS_INFO("executeCB: ScanObjects");        
+
+    // Goal Regions -
+    geometry_msgs::PointStamped redGoal, blueGoal;
+    redGoal.point.x = redGoal_x;
+    redGoal.point.y = redGoal_y;
+    redGoal.point.z = redGoal_z;
+    blueGoal.point.x = blueGoal_x;
+    blueGoal.point.y = blueGoal_y;
+    blueGoal.point.z = blueGoal_z;
     
     kinect_segmentation::ScanObjectsResult result_;
     
@@ -163,6 +189,7 @@ class SegmentTabletop {
     ec.extract (cluster_indices);
 
     marker_array.markers.resize(cluster_indices.size());
+    goals_array.markers.resize(2);
     //std::cout<<cluster_indices.size() << " Objects Found.."<<std::endl;
     
     int i = 0;
@@ -182,7 +209,6 @@ class SegmentTabletop {
         avg_g += objects->points[*pit].g;
         avg_b += objects->points[*pit].b; 
 
-
         counter++;
 
         object_cluster->points.push_back (objects->points[*pit]); 
@@ -192,12 +218,12 @@ class SegmentTabletop {
         camera_temp.point.y = objects->points[*pit].y;
         camera_temp.point.z = objects->points[*pit].z;
 
-     	//transform point to base_link frame
-     	listener.transformPoint("base_link",camera_temp,base_temp);
+      //transform point to base_link frame
+      listener.transformPoint("base_link",camera_temp,base_temp);
 
-     	x_vals.push_back(base_temp.point.x); 
-		y_vals.push_back(base_temp.point.y);
-		z_avg += base_temp.point.z; 
+      x_vals.push_back(base_temp.point.x); 
+      y_vals.push_back(base_temp.point.y);
+      z_avg += base_temp.point.z; 
       }
 
       // Finding average rgb values and z value of cylinder
@@ -211,12 +237,12 @@ class SegmentTabletop {
 
       // D = [x.*x, x.*y, y.*y, x, y, ones];
       for(int i=0; i<x_vals.size(); i++){
-      	D_mat(i,0) = x_vals[i]*x_vals[i];
-      	D_mat(i,1) = x_vals[i]*y_vals[i];
-      	D_mat(i,2) = y_vals[i]*y_vals[i];
-      	D_mat(i,3) = x_vals[i];
-      	D_mat(i,4) = y_vals[i];
-      	D_mat(i,5) = 1.0;
+        D_mat(i,0) = x_vals[i]*x_vals[i];
+        D_mat(i,1) = x_vals[i]*y_vals[i];
+        D_mat(i,2) = y_vals[i]*y_vals[i];
+        D_mat(i,3) = x_vals[i];
+        D_mat(i,4) = y_vals[i];
+        D_mat(i,5) = 1.0;
       }
       
       D_mat_trans = D_mat.transpose();
@@ -230,13 +256,13 @@ class SegmentTabletop {
       // Finding positive eigenvalue
       int posEigen;
       for(int i=0; i<es.eigenvalues().size(); i++){
-      	if(es.eigenvalues().real()[i]>0.01){
-      		posEigen = i;
-      		//std::cout << "\nEigenvalue: ";
-	  		//std::cout << es.eigenvalues().real()[i];
-	  		//std::cout << "\nEigenvectors: ";
-	  		//std::cout << es.eigenvectors().real().col(i);
-      	}
+        if(es.eigenvalues().real()[i]>0.01){
+          posEigen = i;
+          //std::cout << "\nEigenvalue: ";
+        //std::cout << es.eigenvalues().real()[i];
+        //std::cout << "\nEigenvectors: ";
+        //std::cout << es.eigenvectors().real().col(i);
+        }
       }
       
       // Finding the centre of the fitted ellipse
@@ -252,12 +278,12 @@ class SegmentTabletop {
 
       //Finding radius of cylinder
       for(int i=0; i<x_vals.size(); i++){
-      	R += (x0 - x_vals[i])*(x0 - x_vals[i]) + (y0 - y_vals[i])*(y0 - y_vals[i]);
+        R += (x0 - x_vals[i])*(x0 - x_vals[i]) + (y0 - y_vals[i])*(y0 - y_vals[i]);
       }
       R = R/x_vals.size();
       R = sqrt(R);
 
-	  
+    
       object_cluster->width = object_cluster->points.size ();
       object_cluster->height = 1;
       object_cluster->is_dense = true;
@@ -279,18 +305,21 @@ class SegmentTabletop {
       Eigen::Vector4f centroid;
       pcl::compute3DCentroid(*object_cluster, centroid);
       crh.setCentroid(centroid);
-	    */
+    */
 
       geometry_msgs::PointStamped Centroid_Camera_Link;
       geometry_msgs::PointStamped Centroid_Base_Link;
 
       Centroid_Camera_Link.header.frame_id = input_cloud.header.frame_id;
+      
       //Centroid_Camera_Link.point.x = centroid[0];
       //Centroid_Camera_Link.point.y = centroid[1];
       //Centroid_Camera_Link.point.z = centroid[2];
-      
-      //transform point to base_link frame
+
+
+      //transform points to base_link frame
       listener.transformPoint("base_link",Centroid_Camera_Link,Centroid_Base_Link);
+
 
       Centroid_Base_Link.point.x = x0;
       Centroid_Base_Link.point.y = y0;
@@ -299,15 +328,8 @@ class SegmentTabletop {
       float X_pos = Centroid_Base_Link.point.x;
       float Y_pos = Centroid_Base_Link.point.y;
       float Z_pos = Centroid_Base_Link.point.z;
-
       // filter out anything that could be the base of the robot or the gripper or behind the gripper
-        // Implementations:
-        //    -don't detect the base of the robot
-        //    -don't detect objects behind the robot
-        //    -don't detect objects smaller than a certain size or larger than a certain size
-        //    -only detect objects that are definitely blue or red cylinders
-
-      if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > filter_base_link_radius && X_pos < 0 && R < 0.05 && R > 0.015){
+      if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > filter_base_link_radius && X_pos < 0){
         
         result_.centroids.push_back(Centroid_Base_Link);
 
@@ -326,12 +348,12 @@ class SegmentTabletop {
         float y_offset = Y_pos * (cylinder_offset/sqrt(X_pos*X_pos+Y_pos*Y_pos));
         marker_array.markers[i].pose.position.x = X_pos - x_offset;
         if(X_pos > 0){
-        	marker_array.markers[i].pose.position.y = Y_pos - y_offset;
+          marker_array.markers[i].pose.position.y = Y_pos - y_offset;
         }
         else{
-        	marker_array.markers[i].pose.position.y = Y_pos + y_offset;
+          marker_array.markers[i].pose.position.y = Y_pos + y_offset;
         }
-		    */
+    */
         
         marker_array.markers[i].pose.position.x = X_pos;
         marker_array.markers[i].pose.position.y = Y_pos;
@@ -340,35 +362,108 @@ class SegmentTabletop {
         marker_array.markers[i].pose.orientation.y = 0.0;
         marker_array.markers[i].pose.orientation.z = 0.0;
         marker_array.markers[i].pose.orientation.w = 1.0;
-        marker_array.markers[i].scale.x = 2*R;//0.06;//2*R;
-        marker_array.markers[i].scale.y = 2*R;//0.06;//2*R;
+        marker_array.markers[i].scale.x = 0.06;//2*R;
+        marker_array.markers[i].scale.y = 0.06;//2*R;
         marker_array.markers[i].scale.z = 0.12;//4*Z_pos;
         marker_array.markers[i].color.a = 1.0;
         //ROS_INFO("This is centroid number %.4f", i);
-        
-        std::cout << "\nRed: ";
-  	    std::cout << avg_r;
-  	    std::cout << "\nGreen: ";
-  	    std::cout << avg_g;
-	    std::cout << "\nBlue: ";
-  	    std::cout << avg_b;
 
-        // Identifying cylinder colour - NEEDS TO BE CALIBRATED
+
+        // Identifying cylinder colour
         marker_array.markers[i].color.g = 0.0;
-        if(avg_r > avg_b){
-          marker_array.markers[i].color.r = 1.0;
-          marker_array.markers[i].color.b = 0.0;
+        if(simulation){
+        	if(avg_r < avg_b){
+	          marker_array.markers[i].color.r = 1.0;
+	          marker_array.markers[i].color.b = 0.0;
+	        }
+	        else{
+	          marker_array.markers[i].color.r = 0.0;
+	          marker_array.markers[i].color.b = 1.0;
+        	}
         }
         else{
-          marker_array.markers[i].color.r = 0.0;
-          marker_array.markers[i].color.b = 1.0;
+        	if(avg_r > avg_b){
+	          marker_array.markers[i].color.r = 1.0;
+	          marker_array.markers[i].color.b = 0.0;
+	        }
+	        else{
+	          marker_array.markers[i].color.r = 0.0;
+	          marker_array.markers[i].color.b = 1.0;
+        	}
         }
+        
 
         kinect_segmentation::ScanObjectsAction action;
         i++;          
       }  
+
     }
+
+    int j = 0;
+    //goals_array.markers[j].header.frame_id = Centroid_Base_Link.header.frame_id;
+    //goals_array.markers[j].header.stamp = ros::Time();
+    //marker_array.markers[j].ns = "my_namespace";
+    //goals_array.markers[j].id = j;
+    //goals_array.markers[j].type = visualization_msgs::Marker::CYLINDER;
+    //goals_array.markers[j].action = visualization_msgs::Marker::ADD;
+    
+    geometry_msgs::PointStamped redGoal_base_link;
+    geometry_msgs::PointStamped blueGoal_base_link;
+
+    redGoal.header.frame_id = input_cloud.header.frame_id;
+    blueGoal.header.frame_id = input_cloud.header.frame_id;
+
+    listener.transformPoint("base_link",redGoal,redGoal_base_link);
+    listener.transformPoint("base_link",blueGoal,blueGoal_base_link);
+
+    
+    goals_array.markers[j].header.frame_id = redGoal_base_link.header.frame_id;
+    goals_array.markers[j].header.stamp = ros::Time();
+    //goals_array.markers[j].ns = "my_namespace";
+    goals_array.markers[j].id = j;
+    goals_array.markers[j].type = visualization_msgs::Marker::CYLINDER;
+    goals_array.markers[j].action = visualization_msgs::Marker::ADD;    
+    goals_array.markers[j].pose.position.x = redGoal_base_link.point.x;
+    goals_array.markers[j].pose.position.y = redGoal_base_link.point.y;
+    goals_array.markers[j].pose.position.z = redGoal_base_link.point.z;
+    goals_array.markers[j].pose.orientation.x = 0.0;
+    goals_array.markers[j].pose.orientation.y = 0.0;
+    goals_array.markers[j].pose.orientation.z = 0.0;
+    goals_array.markers[j].pose.orientation.w = 1.0;
+    goals_array.markers[j].scale.x = 0.4;//2*R;
+    goals_array.markers[j].scale.y = 0.4;//2*R;
+    goals_array.markers[j].scale.z = 0.005;//4*Z_pos;
+    goals_array.markers[j].color.a = 0.2;
+    goals_array.markers[j].color.r = 1.0;
+    goals_array.markers[j].color.g = 0.0;
+    goals_array.markers[j].color.b = 0.0;
+    j++;
+    
+    goals_array.markers[j].header.frame_id = blueGoal_base_link.header.frame_id;
+    goals_array.markers[j].header.stamp = ros::Time();
+    //goals_array.markers[j].ns = "my_namespace";
+    goals_array.markers[j].id = j;
+    goals_array.markers[j].type = visualization_msgs::Marker::CYLINDER;
+    goals_array.markers[j].action = visualization_msgs::Marker::ADD;    
+    goals_array.markers[j].pose.position.x = blueGoal_base_link.point.x;
+    goals_array.markers[j].pose.position.y = blueGoal_base_link.point.y;
+    goals_array.markers[j].pose.position.z = blueGoal_base_link.point.z;
+    goals_array.markers[j].pose.orientation.x = 0.0;
+    goals_array.markers[j].pose.orientation.y = 0.0;
+    goals_array.markers[j].pose.orientation.z = 0.0;
+    goals_array.markers[j].pose.orientation.w = 1.0;
+    goals_array.markers[j].scale.x = 0.4;//2*R;
+    goals_array.markers[j].scale.y = 0.4;//2*R;
+    goals_array.markers[j].scale.z = 0.005;//4*Z_pos;
+    goals_array.markers[j].color.a = 0.2;
+    goals_array.markers[j].color.r = 0.0;
+    goals_array.markers[j].color.g = 0.0;
+    goals_array.markers[j].color.b = 1.0;
+	
+	
+
     object_markers_pub_.publish (marker_array);    
+    goal_markers_pub_.publish (goals_array); 
     as_.setSucceeded(result_);
   }
   

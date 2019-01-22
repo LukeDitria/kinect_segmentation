@@ -1,8 +1,30 @@
 <?xml version="1.0"?>
 <launch>
+
+ <arg name="sim" />
+ <arg name="redGoal_x"/>
+ <arg name="redGoal_y"/>
+ <arg name="redGoal_z"/>
+ <arg name="blueGoal_x"/>
+ <arg name="blueGoal_y"/>
+ <arg name="blueGoal_z"/>
+ <arg name="point_cloud_topic"/>
+
  <node name="scan_objects" pkg="kinect_segmentation" type="scan_objects" output="screen">
-       <param name="point_cloud_topic" value ="/camera/depth_registered/points"/>
+
+ 	   <param name="point_cloud_topic" value ="$(arg point_cloud_topic)"/>
+
        <param name="out_object_markers_topic" value ="object_markers"/>
+       <param name="out_goal_markers_topic" value ="goal_markers"/>
        <param name="filter_base_link_radius" value="0.3"/>
+       <param name="simulation" value="$(arg sim)"/>
+
+       <param name="redGoal_x" value ="$(arg redGoal_x)"/>
+	   <param name="redGoal_y" value ="$(arg redGoal_y)"/>
+	   <param name="redGoal_z" value ="$(arg redGoal_z)"/>
+
+	   <param name="blueGoal_x" value ="$(arg blueGoal_x)"/>
+	   <param name="blueGoal_y" value ="$(arg blueGoal_y)"/>
+	   <param name="blueGoal_z" value ="$(arg blueGoal_z)"/>
  </node>
 </launch>

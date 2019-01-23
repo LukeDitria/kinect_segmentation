@@ -417,10 +417,18 @@ class SegmentTabletop {
     //goals_array.markers[j].ns = "my_namespace";
     goals_array.markers[j].id = j;
     goals_array.markers[j].type = visualization_msgs::Marker::CYLINDER;
-    goals_array.markers[j].action = visualization_msgs::Marker::ADD;    
-    goals_array.markers[j].pose.position.x = redGoal_base_link.point.x;
-    goals_array.markers[j].pose.position.y = redGoal_base_link.point.y;
-    goals_array.markers[j].pose.position.z = redGoal_base_link.point.z;
+    goals_array.markers[j].action = visualization_msgs::Marker::ADD; 
+    if(simulation){
+    	goals_array.markers[j].pose.position.x = -0.37;
+    	goals_array.markers[j].pose.position.y = 0.6;
+    	goals_array.markers[j].pose.position.z = 0;
+    }
+    else{
+    	goals_array.markers[j].pose.position.x = redGoal_base_link.point.x;
+    	goals_array.markers[j].pose.position.y = redGoal_base_link.point.y;
+    	goals_array.markers[j].pose.position.z = redGoal_base_link.point.z;
+    }
+    
     goals_array.markers[j].pose.orientation.x = 0.0;
     goals_array.markers[j].pose.orientation.y = 0.0;
     goals_array.markers[j].pose.orientation.z = 0.0;
@@ -428,7 +436,7 @@ class SegmentTabletop {
     goals_array.markers[j].scale.x = 0.4;//2*R;
     goals_array.markers[j].scale.y = 0.4;//2*R;
     goals_array.markers[j].scale.z = 0.005;//4*Z_pos;
-    goals_array.markers[j].color.a = 0.2;
+    goals_array.markers[j].color.a = 0.7;
     goals_array.markers[j].color.r = 1.0;
     goals_array.markers[j].color.g = 0.0;
     goals_array.markers[j].color.b = 0.0;
@@ -439,10 +447,18 @@ class SegmentTabletop {
     //goals_array.markers[j].ns = "my_namespace";
     goals_array.markers[j].id = j;
     goals_array.markers[j].type = visualization_msgs::Marker::CYLINDER;
-    goals_array.markers[j].action = visualization_msgs::Marker::ADD;    
-    goals_array.markers[j].pose.position.x = blueGoal_base_link.point.x;
-    goals_array.markers[j].pose.position.y = blueGoal_base_link.point.y;
-    goals_array.markers[j].pose.position.z = blueGoal_base_link.point.z;
+    goals_array.markers[j].action = visualization_msgs::Marker::ADD;
+    if(simulation){
+    	goals_array.markers[j].pose.position.x = -0.37;
+    	goals_array.markers[j].pose.position.y = -0.6;
+    	goals_array.markers[j].pose.position.z = 0;
+    }
+    else{
+    	goals_array.markers[j].pose.position.x = blueGoal_base_link.point.x;
+    	goals_array.markers[j].pose.position.y = blueGoal_base_link.point.y;
+    	goals_array.markers[j].pose.position.z = blueGoal_base_link.point.z;
+    }
+    goals_array.markers[j].pose.position.z = 0;
     goals_array.markers[j].pose.orientation.x = 0.0;
     goals_array.markers[j].pose.orientation.y = 0.0;
     goals_array.markers[j].pose.orientation.z = 0.0;
@@ -450,7 +466,7 @@ class SegmentTabletop {
     goals_array.markers[j].scale.x = 0.4;//2*R;
     goals_array.markers[j].scale.y = 0.4;//2*R;
     goals_array.markers[j].scale.z = 0.005;//4*Z_pos;
-    goals_array.markers[j].color.a = 0.2;
+    goals_array.markers[j].color.a = 0.7;
     goals_array.markers[j].color.r = 0.0;
     goals_array.markers[j].color.g = 0.0;
     goals_array.markers[j].color.b = 1.0;

@@ -319,6 +319,7 @@ class SegmentTabletop {
       if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > filter_base_link_radius && X_pos < 0)
     	{
     	  result_.centroids.push_back(Centroid_Base_Link);
+	  result_.radiuses.push_back(R);
     	  
     	  marker_array.markers[i].header.frame_id = Centroid_Base_Link.header.frame_id;
     	  marker_array.markers[i].header.stamp = ros::Time();

@@ -2,6 +2,7 @@
 ---
 # Define the result
 geometry_msgs/PointStamped[] centroids
+float64[] radiuses
 string[] colors
 geometry_msgs/PointStamped red_goal
 geometry_msgs/PointStamped blue_goal

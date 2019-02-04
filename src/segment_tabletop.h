@@ -39,6 +39,9 @@
 //CUSTOM
 #include <kinect_segmentation/ScanObjectsAction.h>
 
+//GLOBAL VARIABLES
+int initialiseGoals = 1;
+
 typedef pcl::Histogram<90> CRH90;
 
 class SegmentTabletop {
@@ -98,6 +101,9 @@ class SegmentTabletop {
 
     
     kinect_segmentation::ScanObjectsResult result_;
+    float redRadius = 0.15;
+  	float blueRadius = 0.15;
+
     
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
     pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients ());
@@ -299,14 +305,15 @@ class SegmentTabletop {
     */
 
 
-      geometry_msgs::PointStamped Centroid_Camera_Link;
+      //geometry_msgs::PointStamped Centroid_Camera_Link;
       geometry_msgs::PointStamped Centroid_Base_Link;
 
-      Centroid_Camera_Link.header.frame_id = input_cloud.header.frame_id;
+      //Centroid_Camera_Link.header.frame_id = input_cloud.header.frame_id;
 
       //transform points to base_link frame
-      listener.transformPoint("base_link",Centroid_Camera_Link,Centroid_Base_Link);
+      //listener.transformPoint("base_link",Centroid_Camera_Link,Centroid_Base_Link);
 
+      Centroid_Base_Link.header.frame_id = "base_link";
 
       Centroid_Base_Link.point.x = x0;
       Centroid_Base_Link.point.y = y0;
@@ -327,22 +334,7 @@ class SegmentTabletop {
     	  marker_array.markers[i].id = i;
     	  marker_array.markers[i].type = visualization_msgs::Marker::CYLINDER;
     	  marker_array.markers[i].action = visualization_msgs::Marker::ADD;
-            
 
-    	  /*
-    	  // Positioning markers - linear method (not super accurate)
-    	  float cylinder_offset = 0.025;
-    	  float x_offset = X_pos * (cylinder_offset/sqrt(X_pos*X_pos+Y_pos*Y_pos));
-    	  float y_offset = Y_pos * (cylinder_offset/sqrt(X_pos*X_pos+Y_pos*Y_pos));
-    	  marker_array.markers[i].pose.position.x = X_pos - x_offset;
-    	  if(X_pos > 0){
-              marker_array.markers[i].pose.position.y = Y_pos - y_offset;
-    	  }
-    	  else{
-              marker_array.markers[i].pose.position.y = Y_pos + y_offset;
-    	  }
-    	  */
-            
     	  marker_array.markers[i].pose.position.x = X_pos;
     	  marker_array.markers[i].pose.position.y = Y_pos;
     	  marker_array.markers[i].pose.position.z = Z_pos;
@@ -391,35 +383,54 @@ class SegmentTabletop {
 
     }
 
-    int j = 0;
-    
-        
-    // Goal Regions -
-    geometry_msgs::PointStamped redGoal;
-    geometry_msgs::PointStamped blueGoal;
-
-    redGoal.point.x = redGoal_x;
-    redGoal.point.y = redGoal_y;
-    redGoal.point.z = redGoal_z;
-    blueGoal.point.x = blueGoal_x;
-    blueGoal.point.y = blueGoal_y;
-    blueGoal.point.z = blueGoal_z;
-    
-    
     geometry_msgs::PointStamped redGoal_base_link;
     geometry_msgs::PointStamped blueGoal_base_link;
 
-    redGoal.header.frame_id = input_cloud.header.frame_id;
-    blueGoal.header.frame_id = input_cloud.header.frame_id;
 
-    listener.transformPoint("base_link",redGoal,redGoal_base_link);
-    listener.transformPoint("base_link",blueGoal,blueGoal_base_link);
+    redGoal_base_link.header.frame_id = "base_link";
+    blueGoal_base_link.header.frame_id = "base_link";
 
+
+
+    double x1, x2, y1, y2;
+    if(goal->goal_reached || initialiseGoals){  
+      initialiseGoals = 0;    
+
+      std::random_device rd;
+      std::mt19937 gen(rd());
+      //Distribution encompasses region projected by projector
+      std::uniform_real_distribution<> dist1(-0.17, -0.55); // Need to make table bigger in box2d and gazebo //-0.85);
+      std::uniform_real_distribution<> dist2(-0.465, 0.65); // Real environment (-0.465, 0.75)
+
+      bool goalCheck = 1;
+      while(goalCheck){
+        x1 = dist1(gen);
+        x2 = dist1(gen);
+        y1 = dist2(gen);
+        y2 = dist2(gen);
+
+        if(((x2 > (x1+redRadius)) || (x2 < (x1-redRadius))) && ((y2 > (y1+redRadius)) || (y2 < (y1-redRadius)))){
+          goalCheck = 0;
+        }
+      }
+    }
+
+    int j = 0;
+
+    redGoal_base_link.point.x = x1;
+    blueGoal_base_link.point.x = x2;
+    redGoal_base_link.point.y = y1;
+    blueGoal_base_link.point.y = y2;
     redGoal_base_link.point.z = 0;
     blueGoal_base_link.point.z = 0;
-    
+
     result_.red_goal = redGoal_base_link;
     result_.blue_goal = blueGoal_base_link; 
+
+
+    result_.goal_radiuses.push_back(redRadius);
+    result_.goal_radiuses.push_back(blueRadius);
+
 
     // Red Goal
     goals_array.markers[j].header.frame_id = redGoal_base_link.header.frame_id;
@@ -435,8 +446,8 @@ class SegmentTabletop {
     goals_array.markers[j].pose.orientation.y = 0.0;
     goals_array.markers[j].pose.orientation.z = 0.0;
     goals_array.markers[j].pose.orientation.w = 1.0;
-    goals_array.markers[j].scale.x = 0.4;//2*R;
-    goals_array.markers[j].scale.y = 0.4;//2*R;
+    goals_array.markers[j].scale.x = 2*redRadius;//2*R;
+    goals_array.markers[j].scale.y = 2*redRadius;//2*R;
     goals_array.markers[j].scale.z = 0.005;//4*Z_pos;
     goals_array.markers[j].color.a = 0.7;
     goals_array.markers[j].color.r = 1.0;
@@ -444,7 +455,6 @@ class SegmentTabletop {
     goals_array.markers[j].color.b = 0.0;
     j++;
      
-
     // Blue Goal
     goals_array.markers[j].header.frame_id = blueGoal_base_link.header.frame_id;
     goals_array.markers[j].header.stamp = ros::Time();
@@ -459,8 +469,8 @@ class SegmentTabletop {
     goals_array.markers[j].pose.orientation.y = 0.0;
     goals_array.markers[j].pose.orientation.z = 0.0;
     goals_array.markers[j].pose.orientation.w = 1.0;
-    goals_array.markers[j].scale.x = 0.4;//2*R;
-    goals_array.markers[j].scale.y = 0.4;//2*R;
+    goals_array.markers[j].scale.x = 2*blueRadius;//2*R;
+    goals_array.markers[j].scale.y = 2*blueRadius;//2*R;
     goals_array.markers[j].scale.z = 0.005;//4*Z_pos;
     goals_array.markers[j].color.a = 0.7;
     goals_array.markers[j].color.r = 0.0;

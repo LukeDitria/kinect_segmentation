@@ -178,7 +178,7 @@ class SegmentTabletop {
     tree->setInputCloud (objects);
     std::vector<pcl::PointIndices> cluster_indices;
     pcl::EuclideanClusterExtraction<pcl::PointXYZRGB> ec;
-    ec.setClusterTolerance (0.005); // 2cm
+    ec.setClusterTolerance (0.01); // 1cm
     ec.setMinClusterSize (30);
     ec.setMaxClusterSize (15000); //25000
     ec.setSearchMethod (tree);

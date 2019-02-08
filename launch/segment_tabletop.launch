@@ -2,12 +2,12 @@
 <launch>
 
  <arg name="sim" />
- <arg name="redGoal_x"/>
- <arg name="redGoal_y"/>
- <arg name="redGoal_z"/>
- <arg name="blueGoal_x"/>
- <arg name="blueGoal_y"/>
- <arg name="blueGoal_z"/>
+ <arg name="x_min"/>
+ <arg name="x_max"/>
+ <arg name="y_min"/>
+ <arg name="y_max"/>
+ <arg name="red_radius"/>
+ <arg name="blue_radius"/>
  <arg name="point_cloud_topic"/>
 
  <node name="scan_objects" pkg="kinect_segmentation" type="scan_objects" output="screen">
@@ -19,12 +19,12 @@
        <param name="filter_base_link_radius" value="0.3"/>
        <param name="simulation" value="$(arg sim)"/>
 
-       <param name="redGoal_x" value ="$(arg redGoal_x)"/>
-	   <param name="redGoal_y" value ="$(arg redGoal_y)"/>
-	   <param name="redGoal_z" value ="$(arg redGoal_z)"/>
-
-	   <param name="blueGoal_x" value ="$(arg blueGoal_x)"/>
-	   <param name="blueGoal_y" value ="$(arg blueGoal_y)"/>
-	   <param name="blueGoal_z" value ="$(arg blueGoal_z)"/>
+       <param name="x_min" value ="$(arg x_min)"/>
+	   <param name="x_max" value ="$(arg x_max)"/>
+	   <param name="y_min" value ="$(arg y_min)"/>
+	   <param name="y_max" value ="$(arg y_max)"/>
+	   
+	   <param name="red_radius" value ="$(arg red_radius)"/>
+	   <param name="blue_radius" value ="$(arg blue_radius)"/>
  </node>
 </launch>

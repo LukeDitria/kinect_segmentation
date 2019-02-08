@@ -63,7 +63,7 @@ class SegmentTabletop {
   sensor_msgs::PointCloud2 input_cloud;
   std::mutex cloud_mutex;
   double filter_base_link_radius;
-  double redGoal_x, redGoal_y, redGoal_z, blueGoal_x, blueGoal_y, blueGoal_z;
+  double x_min, x_max, y_min, y_max, red_radius, blue_radius;
   bool simulation;
 
   void init_params(){    
@@ -71,12 +71,12 @@ class SegmentTabletop {
     nh_.getParam("out_object_markers_topic", out_object_markers_topic);
     nh_.getParam("filter_base_link_radius", filter_base_link_radius);
     nh_.getParam("out_goal_markers_topic", out_goal_markers_topic);
-    nh_.getParam("redGoal_x", redGoal_x);
-    nh_.getParam("redGoal_y", redGoal_y);
-    nh_.getParam("redGoal_z", redGoal_z);
-    nh_.getParam("blueGoal_x", blueGoal_x);
-    nh_.getParam("blueGoal_y", blueGoal_y);
-    nh_.getParam("blueGoal_z", blueGoal_z);
+    nh_.getParam("x_min", x_min);
+    nh_.getParam("x_max", x_max);
+    nh_.getParam("y_min", y_min);
+    nh_.getParam("y_max", y_max);
+    nh_.getParam("red_radius", red_radius);
+    nh_.getParam("blue_radius", blue_radius);
     nh_.getParam("simulation", simulation);
 
   }  
@@ -101,8 +101,8 @@ class SegmentTabletop {
 
     
     kinect_segmentation::ScanObjectsResult result_;
-    float redRadius = 0.15;
-  	float blueRadius = 0.15;
+    //float redRadius = 0.1;
+    //float blueRadius = 0.15;
 
     
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
@@ -178,8 +178,8 @@ class SegmentTabletop {
     tree->setInputCloud (objects);
     std::vector<pcl::PointIndices> cluster_indices;
     pcl::EuclideanClusterExtraction<pcl::PointXYZRGB> ec;
-    ec.setClusterTolerance (0.02); // 2cm
-    ec.setMinClusterSize (100);
+    ec.setClusterTolerance (0.005); // 2cm
+    ec.setMinClusterSize (30);
     ec.setMaxClusterSize (15000); //25000
     ec.setSearchMethod (tree);
     ec.setInputCloud (objects);
@@ -324,62 +324,63 @@ class SegmentTabletop {
       float Z_pos = Centroid_Base_Link.point.z;
       // filter out anything that could be the base of the robot or the gripper or behind the gripper
       if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > filter_base_link_radius && X_pos < 0)
-    	{
-    	  result_.centroids.push_back(Centroid_Base_Link);
-	  result_.radiuses.push_back(R);
-    	  
-    	  marker_array.markers[i].header.frame_id = Centroid_Base_Link.header.frame_id;
-    	  marker_array.markers[i].header.stamp = ros::Time();
-    	  //marker_array.markers[i].ns = "my_namespace";
-    	  marker_array.markers[i].id = i;
-    	  marker_array.markers[i].type = visualization_msgs::Marker::CYLINDER;
-    	  marker_array.markers[i].action = visualization_msgs::Marker::ADD;
+      {
+        result_.centroids.push_back(Centroid_Base_Link);
+    result_.radiuses.push_back(R);
+        
 
-    	  marker_array.markers[i].pose.position.x = X_pos;
-    	  marker_array.markers[i].pose.position.y = Y_pos;
-    	  marker_array.markers[i].pose.position.z = Z_pos;
-    	  marker_array.markers[i].pose.orientation.x = 0.0;
-    	  marker_array.markers[i].pose.orientation.y = 0.0;
-    	  marker_array.markers[i].pose.orientation.z = 0.0;
-    	  marker_array.markers[i].pose.orientation.w = 1.0;
-    	  marker_array.markers[i].scale.x = 0.06;//2*R;
-    	  marker_array.markers[i].scale.y = 0.06;//2*R;
-    	  marker_array.markers[i].scale.z = 0.12;//4*Z_pos;
-    	  marker_array.markers[i].color.a = 1.0;
-    	  //ROS_INFO("This is centroid number %.4f", i);
+        marker_array.markers[i].header.frame_id = Centroid_Base_Link.header.frame_id;
+        marker_array.markers[i].header.stamp = ros::Time();
+        //marker_array.markers[i].ns = "my_namespace";
+        marker_array.markers[i].id = i;
+        marker_array.markers[i].type = visualization_msgs::Marker::CYLINDER;
+        marker_array.markers[i].action = visualization_msgs::Marker::ADD;
 
-    	  std::string color;
-    	  // Identifying cylinder colour
-    	  marker_array.markers[i].color.g = 0.0;
-    	  
-    	  if(simulation){
-    	    if(avg_r < avg_b){
-    	      marker_array.markers[i].color.r = 1.0;
-    	      marker_array.markers[i].color.b = 0.0;
-    	      color = "red";
-    	    }
-    	    else{
-    	      marker_array.markers[i].color.r = 0.0;
-    	      marker_array.markers[i].color.b = 1.0;
-    	      color = "blue";
-    	    }
-    	  }
-    	  else{
-    	    if(avg_r > avg_b){
-    	      marker_array.markers[i].color.r = 1.0;
-    	      marker_array.markers[i].color.b = 0.0;
-    	      color = "red";
-    	    }
-    	    else{
-    	      marker_array.markers[i].color.r = 0.0;
-    	      marker_array.markers[i].color.b = 1.0;
-    	      color = "blue";
-    	    }
-    	  }
-    	  result_.colors.push_back(color);
+        marker_array.markers[i].pose.position.x = X_pos;
+        marker_array.markers[i].pose.position.y = Y_pos;
+        marker_array.markers[i].pose.position.z = Z_pos;
+        marker_array.markers[i].pose.orientation.x = 0.0;
+        marker_array.markers[i].pose.orientation.y = 0.0;
+        marker_array.markers[i].pose.orientation.z = 0.0;
+        marker_array.markers[i].pose.orientation.w = 1.0;
+        marker_array.markers[i].scale.x = 0.06;//2*R;
+        marker_array.markers[i].scale.y = 0.06;//2*R;
+        marker_array.markers[i].scale.z = 0.12;//4*Z_pos;
+        marker_array.markers[i].color.a = 1.0;
+        //ROS_INFO("This is centroid number %.4f", i);
 
-    	  i++;          
-    	}  
+        std::string color;
+        // Identifying cylinder colour
+        marker_array.markers[i].color.g = 0.0;
+        
+        if(simulation){
+          if(avg_r < avg_b){
+            marker_array.markers[i].color.r = 1.0;
+            marker_array.markers[i].color.b = 0.0;
+            color = "red";
+          }
+          else{
+            marker_array.markers[i].color.r = 0.0;
+            marker_array.markers[i].color.b = 1.0;
+            color = "blue";
+          }
+        }
+        else{
+          if(avg_r > avg_b){
+            marker_array.markers[i].color.r = 1.0;
+            marker_array.markers[i].color.b = 0.0;
+            color = "red";
+          }
+          else{
+            marker_array.markers[i].color.r = 0.0;
+            marker_array.markers[i].color.b = 1.0;
+            color = "blue";
+          }
+        }
+        result_.colors.push_back(color);
+
+        i++;          
+      }  
 
     }
 
@@ -398,9 +399,11 @@ class SegmentTabletop {
 
       std::random_device rd;
       std::mt19937 gen(rd());
-      //Distribution encompasses region projected by projector
-      std::uniform_real_distribution<> dist1(-0.17, -0.55); // Need to make table bigger in box2d and gazebo //-0.85);
-      std::uniform_real_distribution<> dist2(-0.465, 0.65); // Real environment (-0.465, 0.75)
+      // Distribution encompasses region projected by projector
+      // Vertical Limits
+      std::uniform_real_distribution<> dist1(y_min, y_max); // Need to make table bigger in box2d and gazebo //REAL: (-0.17,-0.85);
+      // Horizontal Limits
+      std::uniform_real_distribution<> dist2(x_min, x_max); // REAL: (-0.465, 0.75)
 
       bool goalCheck = 1;
       while(goalCheck){
@@ -409,7 +412,7 @@ class SegmentTabletop {
         y1 = dist2(gen);
         y2 = dist2(gen);
 
-        if(((x2 > (x1+redRadius)) || (x2 < (x1-redRadius))) && ((y2 > (y1+redRadius)) || (y2 < (y1-redRadius)))){
+        if(((x2 > (x1+red_radius)) || (x2 < (x1-red_radius))) && ((y2 > (y1+red_radius)) || (y2 < (y1-red_radius)))){
           goalCheck = 0;
         }
       }
@@ -428,8 +431,8 @@ class SegmentTabletop {
     result_.blue_goal = blueGoal_base_link; 
 
 
-    result_.goal_radiuses.push_back(redRadius);
-    result_.goal_radiuses.push_back(blueRadius);
+    result_.goal_radiuses.push_back(red_radius);
+    result_.goal_radiuses.push_back(blue_radius);
 
 
     // Red Goal
@@ -446,8 +449,8 @@ class SegmentTabletop {
     goals_array.markers[j].pose.orientation.y = 0.0;
     goals_array.markers[j].pose.orientation.z = 0.0;
     goals_array.markers[j].pose.orientation.w = 1.0;
-    goals_array.markers[j].scale.x = 2*redRadius;//2*R;
-    goals_array.markers[j].scale.y = 2*redRadius;//2*R;
+    goals_array.markers[j].scale.x = 2*red_radius;//2*R;
+    goals_array.markers[j].scale.y = 2*red_radius;//2*R;
     goals_array.markers[j].scale.z = 0.005;//4*Z_pos;
     goals_array.markers[j].color.a = 0.7;
     goals_array.markers[j].color.r = 1.0;
@@ -469,15 +472,15 @@ class SegmentTabletop {
     goals_array.markers[j].pose.orientation.y = 0.0;
     goals_array.markers[j].pose.orientation.z = 0.0;
     goals_array.markers[j].pose.orientation.w = 1.0;
-    goals_array.markers[j].scale.x = 2*blueRadius;//2*R;
-    goals_array.markers[j].scale.y = 2*blueRadius;//2*R;
+    goals_array.markers[j].scale.x = 2*blue_radius;//2*R;
+    goals_array.markers[j].scale.y = 2*blue_radius;//2*R;
     goals_array.markers[j].scale.z = 0.005;//4*Z_pos;
     goals_array.markers[j].color.a = 0.7;
     goals_array.markers[j].color.r = 0.0;
     goals_array.markers[j].color.g = 0.0;
     goals_array.markers[j].color.b = 1.0;
-	   
-	   
+     
+     
 
     object_markers_pub_.publish (marker_array);    
     goal_markers_pub_.publish (goals_array); 

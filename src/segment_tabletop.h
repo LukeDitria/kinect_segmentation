@@ -5,7 +5,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
-#include <algorithm> 
+#include <algorithm>
 #include <functional>
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
@@ -66,7 +66,7 @@ class SegmentTabletop {
   double x_min, x_max, y_min, y_max, red_radius, blue_radius;
   bool simulation;
 
-  void init_params(){    
+  void init_params(){
     nh_.getParam("point_cloud_topic", point_cloud_topic);
     nh_.getParam("out_object_markers_topic", out_object_markers_topic);
     nh_.getParam("filter_base_link_radius", filter_base_link_radius);
@@ -79,9 +79,9 @@ class SegmentTabletop {
     nh_.getParam("blue_radius", blue_radius);
     nh_.getParam("simulation", simulation);
 
-  }  
+  }
   void init_subs(){
-    point_cloud_sub_ = nh_.subscribe(point_cloud_topic, 1, &SegmentTabletop::cloudCB, this); 
+    point_cloud_sub_ = nh_.subscribe(point_cloud_topic, 1, &SegmentTabletop::cloudCB, this);
   }
   void init_pubs(){
     object_markers_pub_ = nh_.advertise<visualization_msgs::MarkerArray> (out_object_markers_topic, 1);
@@ -90,21 +90,21 @@ class SegmentTabletop {
   void init_actionlib(){
     as_.start();
     ROS_INFO("Scan Objects Server ON");
-  }      
+  }
   void cloudCB (const sensor_msgs::PointCloud2ConstPtr& input) {
     std::lock_guard<std::mutex> lock{cloud_mutex};
     input_cloud = *input;
   }
   void executeCB(const actionlib::SimpleActionServer<kinect_segmentation::ScanObjectsAction>::GoalConstPtr& goal){
     std::lock_guard<std::mutex> lock{cloud_mutex};
-    ROS_INFO("executeCB: ScanObjects");        
+    ROS_INFO("executeCB: ScanObjects");
 
-    
+
     kinect_segmentation::ScanObjectsResult result_;
     //float redRadius = 0.1;
     //float blueRadius = 0.15;
 
-    
+
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
     pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients ());
     pcl::PointIndices::Ptr inliers (new pcl::PointIndices ());
@@ -121,11 +121,11 @@ class SegmentTabletop {
     seg.setModelType (pcl::SACMODEL_PLANE);
     seg.setMethodType (pcl::SAC_RANSAC);
     seg.setDistanceThreshold (0.01);
-  
-    seg.setInputCloud (cloud);
-    seg.segment (*inliers, *coefficients); 
 
-    if (inliers->indices.size() == 0) {      
+    seg.setInputCloud (cloud);
+    seg.segment (*inliers, *coefficients);
+
+    if (inliers->indices.size() == 0) {
       std::cout << "Could not find a plane in the scene." << std::endl;
       as_.setAborted(result_);
       return;
@@ -137,7 +137,7 @@ class SegmentTabletop {
     pcl::ExtractIndices<pcl::PointXYZRGB> extract;
     // Filtered point cloud
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_inliers (new pcl::PointCloud<pcl::PointXYZRGB>);
-    
+
     extract.setInputCloud (cloud);
     extract.setIndices (inliers);
     extract.setNegative (false);
@@ -155,10 +155,16 @@ class SegmentTabletop {
     pcl::ExtractPolygonalPrismData<pcl::PointXYZRGB> prism;
     prism.setInputCloud(cloud);
     prism.setInputPlanarHull(convexHull);
-    
+
     // First parameter: minimum Z value. Set to 0, segments objects lying on the plane (can be negative).
     // Second parameter: maximum Z value, set to 10cm. Tune it according to the height of the objects you expect.
-    prism.setHeightLimits(0.02f, 0.1f); // Min then Max
+
+    if(simulation){
+      prism.setHeightLimits(0.02f, 0.1f); // Min then Max
+    }
+    else{
+      prism.setHeightLimits(0.1f, 0.2f); // Min then Max
+    }
     //prism.setHeightLimits(-0.5f,-0.02f); // Min then Max
     pcl::PointIndices::Ptr objectIndices(new pcl::PointIndices);
 
@@ -167,19 +173,27 @@ class SegmentTabletop {
     // Get and show all points retrieved by the hull.
     extract.setIndices(objectIndices);
     extract.filter(*objects);
-    
+
     if (objectIndices->indices.size() == 0) {
       //std::cout << "No Objects in the scene." << std::endl;
       as_.setAborted(result_);
       return;
     }
-    
+
     pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB>);
     tree->setInputCloud (objects);
     std::vector<pcl::PointIndices> cluster_indices;
     pcl::EuclideanClusterExtraction<pcl::PointXYZRGB> ec;
-    ec.setClusterTolerance (0.01); // 1cm
-    ec.setMinClusterSize (30);
+
+    if(simulation){
+      ec.setClusterTolerance (0.01); // 1cm
+      ec.setMinClusterSize (30);
+    }
+    else{
+      ec.setClusterTolerance (0.02); // 1cm
+      ec.setMinClusterSize (150);
+    }
+
     ec.setMaxClusterSize (15000); //25000
     ec.setSearchMethod (tree);
     ec.setInputCloud (objects);
@@ -188,7 +202,7 @@ class SegmentTabletop {
     marker_array.markers.resize(cluster_indices.size());
     goals_array.markers.resize(2);
     //std::cout<<cluster_indices.size() << " Objects Found.."<<std::endl;
-    
+
     int i = 0;
     for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it) {
       pcl::PointCloud<pcl::PointXYZRGB>::Ptr object_cluster (new pcl::PointCloud<pcl::PointXYZRGB>);
@@ -200,16 +214,16 @@ class SegmentTabletop {
       std::vector<float> y_vals;
 
       for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit){
-        
+
         // Summing up rgb values of points in object_cluster point clouds
         avg_r += objects->points[*pit].r;
         avg_g += objects->points[*pit].g;
-        avg_b += objects->points[*pit].b; 
+        avg_b += objects->points[*pit].b;
 
         counter++;
 
-        object_cluster->points.push_back (objects->points[*pit]); 
-        
+        object_cluster->points.push_back (objects->points[*pit]);
+
         camera_temp.header.frame_id = input_cloud.header.frame_id;
         camera_temp.point.x = objects->points[*pit].x;
         camera_temp.point.y = objects->points[*pit].y;
@@ -218,9 +232,9 @@ class SegmentTabletop {
         //transform point to base_link frame
         listener.transformPoint("base_link",camera_temp,base_temp);
 
-        x_vals.push_back(base_temp.point.x); 
+        x_vals.push_back(base_temp.point.x);
         y_vals.push_back(base_temp.point.y);
-        z_avg += base_temp.point.z; 
+        z_avg += base_temp.point.z;
       }
 
       // Finding average rgb values and z value of cylinder
@@ -241,7 +255,7 @@ class SegmentTabletop {
         D_mat(i,4) = y_vals[i];
         D_mat(i,5) = 1.0;
       }
-      
+
       D_mat_trans = D_mat.transpose();
       S_mat = D_mat_trans * D_mat;
 
@@ -261,7 +275,7 @@ class SegmentTabletop {
         //std::cout << es.eigenvectors().real().col(i);
         }
       }
-      
+
       // Finding the centre of the fitted ellipse
       float a,b,c,d,e,x0,y0,R = 0;
       a = es.eigenvectors().real().col(posEigen)[0];
@@ -269,7 +283,7 @@ class SegmentTabletop {
       c = es.eigenvectors().real().col(posEigen)[2];
       d = es.eigenvectors().real().col(posEigen)[3]/2.0;
       e = es.eigenvectors().real().col(posEigen)[4]/2.0;
-      
+
       x0=(c*d-b*e)/(b*b-a*c);
       y0=(a*e-b*d)/(b*b-a*c);
 
@@ -280,7 +294,7 @@ class SegmentTabletop {
       R = R/x_vals.size();
       R = sqrt(R);
 
-    
+
       object_cluster->width = object_cluster->points.size ();
       object_cluster->height = 1;
       object_cluster->is_dense = true;
@@ -323,11 +337,18 @@ class SegmentTabletop {
       float Y_pos = Centroid_Base_Link.point.y;
       float Z_pos = Centroid_Base_Link.point.z;
       // filter out anything that could be the base of the robot or the gripper or behind the gripper
-      if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > filter_base_link_radius && X_pos < 0)
+
+      // Table Range Limits
+      float x_table_min = -0.15;
+      float x_table_max = -0.8;
+      float y_table_min = -0.65;
+      float y_table_max = 0.75;
+
+      if (sqrt(X_pos*X_pos+Y_pos*Y_pos+Z_pos*Z_pos) > filter_base_link_radius && X_pos < 0 && X_pos > x_table_max && Y_pos > y_table_min && Y_pos < y_table_max )
       {
         result_.centroids.push_back(Centroid_Base_Link);
     result_.radiuses.push_back(R);
-        
+
 
         marker_array.markers[i].header.frame_id = Centroid_Base_Link.header.frame_id;
         marker_array.markers[i].header.stamp = ros::Time();
@@ -338,23 +359,27 @@ class SegmentTabletop {
 
         marker_array.markers[i].pose.position.x = X_pos;
         marker_array.markers[i].pose.position.y = Y_pos;
-        marker_array.markers[i].pose.position.z = Z_pos;
+        //marker_array.markers[i].pose.position.z = 0.09;//Z_pos;
         marker_array.markers[i].pose.orientation.x = 0.0;
         marker_array.markers[i].pose.orientation.y = 0.0;
         marker_array.markers[i].pose.orientation.z = 0.0;
         marker_array.markers[i].pose.orientation.w = 1.0;
-        marker_array.markers[i].scale.x = 0.06;//2*R;
-        marker_array.markers[i].scale.y = 0.06;//2*R;
-        marker_array.markers[i].scale.z = 0.12;//4*Z_pos;
+        marker_array.markers[i].scale.x = 0.03;//2*R;
+        marker_array.markers[i].scale.y = 0.03;//2*R;
+        //marker_array.markers[i].scale.z = 0.18;//4*Z_pos;
         marker_array.markers[i].color.a = 1.0;
         //ROS_INFO("This is centroid number %.4f", i);
 
         std::string color;
         // Identifying cylinder colour
         marker_array.markers[i].color.g = 0.0;
-        
+
+        // Red and Blue cylinders in simulation
         if(simulation){
-          if(avg_r < avg_b){
+          marker_array.markers[i].pose.position.z = Z_pos;
+          marker_array.markers[i].scale.z = 0.12;
+
+          if(avg_g < avg_b){
             marker_array.markers[i].color.r = 1.0;
             marker_array.markers[i].color.b = 0.0;
             color = "red";
@@ -365,22 +390,33 @@ class SegmentTabletop {
             color = "blue";
           }
         }
+        // Aqua and blue salt shakers in real life
         else{
-          if(avg_r > avg_b){
-            marker_array.markers[i].color.r = 1.0;
-            marker_array.markers[i].color.b = 0.0;
+          marker_array.markers[i].pose.position.z = 0.09;//Z_pos;
+          marker_array.markers[i].scale.z = 0.18;//4*Z_pos;
+          if(avg_g > avg_b){ // Aqua
+            //marker_array.markers[i].color.r = 1.0;
+            //marker_array.markers[i].color.b = 0.0;
+
+            marker_array.markers[i].color.r = 0.25;
+            marker_array.markers[i].color.g = 0.91;
+            marker_array.markers[i].color.b = 0.75;
             color = "red";
           }
-          else{
-            marker_array.markers[i].color.r = 0.0;
+          else{ // Blue
+            //marker_array.markers[i].color.r = 0.0;
+            //marker_array.markers[i].color.b = 1.0;
+
+            marker_array.markers[i].color.r = 0.37;
+            marker_array.markers[i].color.g = 0.76;
             marker_array.markers[i].color.b = 1.0;
             color = "blue";
           }
         }
         result_.colors.push_back(color);
 
-        i++;          
-      }  
+        i++;
+      }
 
     }
 
@@ -394,8 +430,8 @@ class SegmentTabletop {
 
 
     double x1, x2, y1, y2;
-    if(goal->goal_reached || initialiseGoals){  
-      initialiseGoals = 0;    
+    if(goal->goal_reached || initialiseGoals){
+      initialiseGoals = 0;
 
       std::random_device rd;
       std::mt19937 gen(rd());
@@ -428,7 +464,7 @@ class SegmentTabletop {
     blueGoal_base_link.point.z = 0;
 
     result_.red_goal = redGoal_base_link;
-    result_.blue_goal = blueGoal_base_link; 
+    result_.blue_goal = blueGoal_base_link;
 
 
     result_.goal_radiuses.push_back(red_radius);
@@ -441,7 +477,7 @@ class SegmentTabletop {
     //goals_array.markers[j].ns = "my_namespace";
     goals_array.markers[j].id = j;
     goals_array.markers[j].type = visualization_msgs::Marker::CYLINDER;
-    goals_array.markers[j].action = visualization_msgs::Marker::ADD; 
+    goals_array.markers[j].action = visualization_msgs::Marker::ADD;
     goals_array.markers[j].pose.position.x = redGoal_base_link.point.x;
     goals_array.markers[j].pose.position.y = redGoal_base_link.point.y;
     goals_array.markers[j].pose.position.z = redGoal_base_link.point.z;
@@ -453,11 +489,20 @@ class SegmentTabletop {
     goals_array.markers[j].scale.y = 2*red_radius;//2*R;
     goals_array.markers[j].scale.z = 0.005;//4*Z_pos;
     goals_array.markers[j].color.a = 0.7;
-    goals_array.markers[j].color.r = 1.0;
-    goals_array.markers[j].color.g = 0.0;
-    goals_array.markers[j].color.b = 0.0;
+    if(simulation){
+      goals_array.markers[j].color.r = 1.0;
+      goals_array.markers[j].color.g = 0.0;
+      goals_array.markers[j].color.b = 0.0;
+    }
+    else{
+      goals_array.markers[j].color.r = 0.25;
+      goals_array.markers[j].color.g = 0.91;
+      goals_array.markers[j].color.b = 0.75;
+    }
+
+
     j++;
-     
+
     // Blue Goal
     goals_array.markers[j].header.frame_id = blueGoal_base_link.header.frame_id;
     goals_array.markers[j].header.stamp = ros::Time();
@@ -476,17 +521,24 @@ class SegmentTabletop {
     goals_array.markers[j].scale.y = 2*blue_radius;//2*R;
     goals_array.markers[j].scale.z = 0.005;//4*Z_pos;
     goals_array.markers[j].color.a = 0.7;
-    goals_array.markers[j].color.r = 0.0;
-    goals_array.markers[j].color.g = 0.0;
-    goals_array.markers[j].color.b = 1.0;
-     
-     
+    if(simulation){
+      goals_array.markers[j].color.r = 0.0;
+      goals_array.markers[j].color.g = 0.0;
+      goals_array.markers[j].color.b = 1.0;
+    }
+    else{
+      goals_array.markers[j].color.r = 0.37;
+      goals_array.markers[j].color.g = 0.76;
+      goals_array.markers[j].color.b = 1.0;
+    }
 
-    object_markers_pub_.publish (marker_array);    
-    goal_markers_pub_.publish (goals_array); 
+
+
+    object_markers_pub_.publish (marker_array);
+    goal_markers_pub_.publish (goals_array);
     as_.setSucceeded(result_);
   }
-  
+
 public:
 
  SegmentTabletop(ros::NodeHandle* nodehandle): nh_(*nodehandle), as_(nh_, "/scan_objects", boost::bind(&SegmentTabletop::executeCB, this, _1),false) {
@@ -495,5 +547,5 @@ public:
     init_pubs();
     init_actionlib();
   }
-  
+
 };

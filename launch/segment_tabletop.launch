@@ -2,6 +2,7 @@
 <launch>
 
  <arg name="sim" />
+ <arg name="perfect_perception" />
  <arg name="x_min"/>
  <arg name="x_max"/>
  <arg name="y_min"/>
@@ -12,19 +13,20 @@
 
  <node name="scan_objects" pkg="kinect_segmentation" type="scan_objects" output="screen">
 
- 	   <param name="point_cloud_topic" value ="$(arg point_cloud_topic)"/>
+   <param name="point_cloud_topic" value ="$(arg point_cloud_topic)"/>
 
-       <param name="out_object_markers_topic" value ="object_markers"/>
-       <param name="out_goal_markers_topic" value ="goal_markers"/>
-       <param name="filter_base_link_radius" value="0.3"/>
-       <param name="simulation" value="$(arg sim)"/>
+   <param name="out_object_markers_topic" value ="object_markers"/>
+   <param name="out_goal_markers_topic" value ="goal_markers"/>
+   <param name="filter_base_link_radius" value="0.3"/>
+   <param name="simulation" value="$(arg sim)"/>
 
-       <param name="x_min" value ="$(arg x_min)"/>
-	   <param name="x_max" value ="$(arg x_max)"/>
-	   <param name="y_min" value ="$(arg y_min)"/>
-	   <param name="y_max" value ="$(arg y_max)"/>
-	   
-	   <param name="red_radius" value ="$(arg red_radius)"/>
-	   <param name="blue_radius" value ="$(arg blue_radius)"/>
+   <param name="x_min" value ="$(arg x_min)"/>
+   <param name="x_max" value ="$(arg x_max)"/>
+   <param name="y_min" value ="$(arg y_min)"/>
+   <param name="y_max" value ="$(arg y_max)"/>
+   
+   <param name="red_radius" value ="$(arg red_radius)"/>
+   <param name="blue_radius" value ="$(arg blue_radius)"/>
+   <param name="perfect_perception" value ="$(arg perfect_perception)"/>
  </node>
 </launch>

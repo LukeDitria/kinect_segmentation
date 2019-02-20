@@ -72,12 +72,6 @@ class SegmentTabletop {
     nh_.getParam("out_object_markers_topic", out_object_markers_topic);
     nh_.getParam("filter_base_link_radius", filter_base_link_radius);
     nh_.getParam("out_goal_markers_topic", out_goal_markers_topic);
-    nh_.getParam("x_min", x_min);
-    nh_.getParam("x_max", x_max);
-    nh_.getParam("y_min", y_min);
-    nh_.getParam("y_max", y_max);
-    nh_.getParam("red_radius", red_radius);
-    nh_.getParam("blue_radius", blue_radius);
     nh_.getParam("simulation", simulation);
     nh_.getParam("perfect_perception", perfect_perception);
   }
@@ -423,55 +417,18 @@ class SegmentTabletop {
 
     }
 
+
     geometry_msgs::PointStamped redGoal_base_link;
     geometry_msgs::PointStamped blueGoal_base_link;
 
+    redGoal_base_link = goal->red_goal;
+    blueGoal_base_link = goal->blue_goal;
+    
+    float red_radius = goal->goal_radiuses[0];
+    float blue_radius = goal->goal_radiuses[1];
 
-    redGoal_base_link.header.frame_id = "base_link";
-    blueGoal_base_link.header.frame_id = "base_link";
-
-
-
-    double x1, x2, y1, y2;
-    if(goal->goal_reached || initialiseGoals){
-      initialiseGoals = 0;
-
-      std::random_device rd;
-      std::mt19937 gen(rd());
-      // Distribution encompasses region projected by projector
-      // Vertical Limits
-      std::uniform_real_distribution<> dist1(y_min, y_max); // Need to make table bigger in box2d and gazebo //REAL: (-0.17,-0.85);
-      // Horizontal Limits
-      std::uniform_real_distribution<> dist2(x_min, x_max); // REAL: (-0.465, 0.75)
-
-      bool goalCheck = 1;
-      while(goalCheck){
-        x1 = dist1(gen);
-        x2 = dist1(gen);
-        y1 = dist2(gen);
-        y2 = dist2(gen);
-
-        if(((x2 > (x1+red_radius)) || (x2 < (x1-red_radius))) && ((y2 > (y1+red_radius)) || (y2 < (y1-red_radius)))){
-          goalCheck = 0;
-        }
-      }
-    }
 
     int j = 0;
-
-    redGoal_base_link.point.x = x1;
-    blueGoal_base_link.point.x = x2;
-    redGoal_base_link.point.y = y1;
-    blueGoal_base_link.point.y = y2;
-    redGoal_base_link.point.z = 0;
-    blueGoal_base_link.point.z = 0;
-
-    result_.red_goal = redGoal_base_link;
-    result_.blue_goal = blueGoal_base_link;
-
-
-    result_.goal_radiuses.push_back(red_radius);
-    result_.goal_radiuses.push_back(blue_radius);
 
 
     // Red Goal

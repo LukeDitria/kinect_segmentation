@@ -65,7 +65,6 @@ class SegmentTabletop {
   double filter_base_link_radius;
   double x_min, x_max, y_min, y_max, red_radius, blue_radius;
   bool simulation;
-  bool perfect_perception;
   
   void init_params(){    
     nh_.getParam("point_cloud_topic", point_cloud_topic);
@@ -73,7 +72,6 @@ class SegmentTabletop {
     nh_.getParam("filter_base_link_radius", filter_base_link_radius);
     nh_.getParam("out_goal_markers_topic", out_goal_markers_topic);
     nh_.getParam("simulation", simulation);
-    nh_.getParam("perfect_perception", perfect_perception);
   }
   
   void init_subs(){
@@ -97,10 +95,6 @@ class SegmentTabletop {
 
 
     kinect_segmentation::ScanObjectsResult result_;
-
-    if (simulation && perfect_perception) {
-      //@Shayne TODO: just return the ground truth. No pt cloud processing required.
-    }
        
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
     pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients ());

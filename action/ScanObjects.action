@@ -1,5 +1,4 @@
 # Define the goal
-bool goal_reached
 float64[] goal_radiuses
 geometry_msgs/PointStamped red_goal
 geometry_msgs/PointStamped blue_goal
